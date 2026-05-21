@@ -90,7 +90,7 @@ def _(mo):
 def _(subprocess):
     # packages added via marimo's package management: pyomo !pip install pyomo
     import os
-    if not os.path.exists('/content/Tutorial_input_data'):
+    if not os.path.exists('content/Tutorial_input_data'):
       #! git clone https://github.com/JakubRybka/Tutorial_input_data.git
       subprocess.call(['git', 'clone', 'https://github.com/JakubRybka/Tutorial_input_data.git'])
     import pandas as pd
@@ -185,7 +185,7 @@ def _(mo):
 @app.cell
 def _(pd):
     # Load input data
-    input_data = pd.read_excel('/content/Tutorial_input_data/input_data.xlsx')
+    input_data = pd.read_excel('content/Tutorial_input_data/input_data.xlsx')
 
     input_data['Demand (MWh)'] =(2 + input_data['Demand (MWh)'] *3)*100
 
@@ -193,6 +193,12 @@ def _(pd):
     # Display the first few rows of the input data
     input_data.head()
     return (input_data,)
+
+
+@app.cell
+def _(input_data):
+    input_data
+    return
 
 
 @app.cell(hide_code=True)
@@ -242,10 +248,8 @@ def _(input_data, plt):
 
 
 @app.cell
-def _(input_data, np, pd):
+def _(input_data, np, pd, plt):
     # @title
-    import seaborn as sns
-    import matplotlib.pyplot as plt  # Explicitly import plt
     data_temp = input_data.copy()
     dem = data_temp['Demand (MWh)'].values.reshape(364, 24)
     cf = data_temp['Wind Capacity Factor (p.u.)'].values.reshape(364, 24)
@@ -290,7 +294,7 @@ def _(input_data, np, pd):
     # Adjust layout
     # Show the plots
     plt.show()  # Added return_type='dict' and patch_artist=True  # Setting y-ticks for CF, similar to previous cell
-    return (plt,)
+    return
 
 
 @app.cell(hide_code=True)
@@ -847,8 +851,6 @@ def _(input_data, rep_clustering):
 @app.cell
 def _(input_data, plt, rep_centroids_shifted, rep_labels_shifted):
     # @title
-    import numpy as np
-    import pandas as pd
     R_2 = 24
     demand_profiles = input_data['Demand (MWh)'].values.reshape(-1, R_2)
     wind_profiles = input_data['Wind Capacity Factor (p.u.)'].values.reshape(-1, R_2)  # Number of hours in a representative period (a day)
@@ -906,7 +908,7 @@ def _(input_data, plt, rep_centroids_shifted, rep_labels_shifted):
     # Adjust layout to prevent plot and legend from overlapping
     # Show the plots
     plt.show()  # Plot members with lighter color and higher transparency  # Plot centroid with a darker version of the color and a distinct marker  # Plot Wind Capacity Factor for the current cluster  # Plot members with lighter color and higher transparency  # Plot centroid with a darker version of the color and a distinct marker  # No need to add to centroid_handles for wind as one common legend will be created  # Adjust rect to make space for the legend on the right
-    return np, pd
+    return
 
 
 @app.cell(hide_code=True)
@@ -1685,4 +1687,3 @@ def _(Lower_Bound, Upper_Bound, length, my_mapping_1):
 
 if __name__ == "__main__":
     app.run()
-
