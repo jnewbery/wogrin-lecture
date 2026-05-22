@@ -5,7 +5,7 @@
 import marimo
 
 __generated_with = "0.19.6"
-app = marimo.App()
+app = marimo.App(width="medium")
 
 
 @app.cell
@@ -25,10 +25,6 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    **IMPORTANT:** Before proceeding, create a copy of this notebook by navigating to **File → Save a copy in Drive**. **Please work on the copied version** rather than the original notebook.
-
-    **Please run ALL code cells sequentially to correctly view the results.**
-
     This notebook is designed as a tutorial accompanying [Prof. Sonja Wogrin](https://www.tugraz.at/en/institutes/iee/institute/team/wogrin-sonja)'s talk at the [DTU PES Summer School 2026](https://energy-markets-school.dk/).
 
     **Content Summary**: This tutorial covers time series aggregation for generation expansion planning (GEP) with intertemporal constraints. By the end of the tutorial, you will be tasked with two **challenges**. The first challenge is to cluster the input time series of a specific GEP problem while minimizing the **output error**, i.e., the difference between the optimal objective function values of the full-scale and the aggregated models. The second challenge is to derive with the aggregated model **upper and lower bounds** for the optimal full-scale solution.
@@ -62,17 +58,31 @@ def _(mo):
 
 @app.cell
 def _():
-    import pandas as pd
-    import numpy as np
-    from sklearn.cluster import KMeans
-    import matplotlib.pyplot as plt
-    import pyomo.environ as pyo
     import copy
-    import time
     import os
-    import requests
     from pathlib import Path
-    return KMeans, Path, copy, np, os, pd, plt, pyo, requests, time
+    import requests
+    import time
+
+    import matplotlib.pyplot as plt
+    import numpy as np
+    import pandas as pd
+    import pyomo.environ as pyo
+    from sklearn.cluster import KMeans
+    from sklearn.preprocessing import MinMaxScaler
+    return (
+        KMeans,
+        MinMaxScaler,
+        Path,
+        copy,
+        np,
+        os,
+        pd,
+        plt,
+        pyo,
+        requests,
+        time,
+    )
 
 
 @app.cell(hide_code=True)
@@ -89,12 +99,12 @@ def _(mo):
     ## 2.1. Set the values for the simulation parameters
 
     * **Time Horizon**: The cardinality of the set of time steps $\mathcal{T}$ considered in the simulation, is denoted by $T$ (`T`).
-    * **Operational Costs**: The electricity generation costs (€/MWh) for wind and thermal power plants are denoted by $C^\mathrm{op,w}$ (oper_cost_wind) and $C^\mathrm{op,th}$ (oper_cost_thermal), respectively. The costs associated with energy storage charging and discharging (€/MWh) are represented by $C^{\mathrm{c,s}}$ (`oper_cost_stor_ch`) and $C^{\mathrm{d,s}}$ (`oper_cost_stor_dis`) respectively.
-    * **Storage Parameters**: The charging and discharging efficiencies of the storage are denoted by $\eta^{\mathrm{c,s}}$ (`stor_eff_ch`) and $\eta^{\mathrm{d,s}}$ (`stor_eff_dis`) respectively. The energy to power ratio (h) is denoted by $\tau$ (`stor_etp`).
-    * **Non-Supplied Energy Cost**: The penalty cost (€/MWh) for non-supplied energy is denoted by $C^\mathrm{nse}$ (`oper_cost_nse`).
-    * **Investment Costs**: The capital cost (€/MW) for wind, thermal and storage capacity expansion are denoted by $C^\mathrm{inv,w}$ (`inv_cost_wind`), $C^\mathrm{inv,th}$ (`inv_cost_thermal`) and $C^\mathrm{inv,s}$ (`inv_cost_stor`), respectively.
+    * **Operational Costs**: The electricity generation costs (€/MWh) for wind and thermal power plants are denoted by $C^\mathrm{op,w}$ (`OPER_COST_WIND`) and $C^\mathrm{op,th}$ (`OPER_COST_THERMAL`), respectively. The costs associated with energy storage charging and discharging (€/MWh) are represented by $C^{\mathrm{c,s}}$ (`OPER_COST_STOR_CH`) and $C^{\mathrm{d,s}}$ (`OPER_COST_STOR_CH`) respectively.
+    * **Storage Parameters**: The charging and discharging efficiencies of the storage are denoted by $\eta^{\mathrm{c,s}}$ (`STOR_EFF_CH`) and $\eta^{\mathrm{d,s}}$ (`STOR_EFF_DIS`) respectively. The energy to power ratio (h) is denoted by $\tau$ (`STOR_ETP`).
+    * **Non-Supplied Energy Cost**: The penalty cost (€/MWh) for non-supplied energy is denoted by $C^\mathrm{nse}$ (`OPER_COST_STOR_CH`).
+    * **Investment Costs**: The capital cost (€/MW) for wind, thermal and storage capacity expansion are denoted by $C^\mathrm{inv,w}$ (`INV_COST_WIND`), $C^\mathrm{inv,th}$ (`INV_COST_THERMAL`) and $C^\mathrm{inv,s}$ (`INV_COST_STOR`), respectively.
 
-    **Please do not modify the values assigned to these parameters.**
+    **Do not modify the values assigned to these parameters.**
     """)
     return
 
@@ -105,34 +115,34 @@ def _():
     T = 8736
 
     # Define operational costs
-    oper_cost_wind = 3  # for wind power (€/MWh)
-    oper_cost_thermal = 60  # for thermal power (€/MWh)
-    oper_cost_nse = 5000 # for non-supplied energy (€/MWh)
-    oper_cost_stor_dis = 1.5 # storage discharging cost (€/MWh)
-    oper_cost_stor_ch = 0 # storage charging cost (€/MWh)
+    OPER_COST_WIND = 3  # for wind power (€/MWh)
+    OPER_COST_THERMAL = 60  # for thermal power (€/MWh)
+    OPER_COST_NSE = 5000 # for non-supplied energy (€/MWh)
+    OPER_COST_STOR_DIS = 1.5 # storage discharging cost (€/MWh)
+    OPER_COST_STOR_CH = 0 # storage charging cost (€/MWh)
 
     # Define storage parameters
-    stor_eff_ch = 0.9 # storage charging efficiency
-    stor_eff_dis = 0.9 # storage discharging efficiency
-    stor_etp = 4 # storage energy to power ratio (h)
+    STOR_EFF_CH = 0.9 # storage charging efficiency
+    STOR_EFF_DIS = 0.9 # storage discharging efficiency
+    STOR_ETP = 4 # storage energy to power ratio (h)
 
     # Define investment costs
-    inv_cost_wind = 4e4  # for wind power (€/MW)
-    inv_cost_thermal = 4e4  # for thermal power (€/MW)
-    inv_cost_stor =1e4 # storage investment cost (€/MW)
+    INV_COST_WIND = 4e4  # for wind power (€/MW)
+    INV_COST_THERMAL = 4e4  # for thermal power (€/MW)
+    INV_COST_STOR =1e4 # storage investment cost (€/MW)
     return (
+        INV_COST_STOR,
+        INV_COST_THERMAL,
+        INV_COST_WIND,
+        OPER_COST_NSE,
+        OPER_COST_STOR_CH,
+        OPER_COST_STOR_DIS,
+        OPER_COST_THERMAL,
+        OPER_COST_WIND,
+        STOR_EFF_CH,
+        STOR_EFF_DIS,
+        STOR_ETP,
         T,
-        inv_cost_stor,
-        inv_cost_thermal,
-        inv_cost_wind,
-        oper_cost_nse,
-        oper_cost_stor_ch,
-        oper_cost_stor_dis,
-        oper_cost_thermal,
-        oper_cost_wind,
-        stor_eff_ch,
-        stor_eff_dis,
-        stor_etp,
     )
 
 
@@ -143,9 +153,9 @@ def _(mo):
 
     Fetch `input_data` from `JakubRybka/Tutorial_input_data` repo if not already fetched.
 
-    Load (`input_data`) from `/data` directory.
+    Load `input_data.xlsx` from `/data` directory.
 
-    The `input_data` file is a dataframe with three columns:
+    The `input_data` file is an excel sheet with three columns:
 
     * **Time Step Index (-)**: Contains the time step indices for the simulation, $t = 1, \dots, T$.
     * **Wind Capacity Factor (p.u.)**: Contains the wind capacity factors, denoted as $CF^\mathrm{w}_t$ for $t = 1, \dots, T$.
@@ -168,9 +178,8 @@ def _(Path, os, pd, requests):
 
     input_data['Demand (MWh)'] =(2 + input_data['Demand (MWh)'] *3)*100
 
-
     # Display the first few rows of the input data
-    input_data.head()
+    input_data
     return (input_data,)
 
 
@@ -196,7 +205,6 @@ def _(input_data, plt):
     axes[0].set_title('Demand Data (MWh) Distribution', fontsize=16,weight='bold')
     axes[0].set_xlabel('Value', fontsize=16)
     axes[0].set_ylabel('Frequency', fontsize=16)
-    #axes[0].set_xticks([0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1])
     axes[0].set_yticks([0, 100, 200, 300, 400, 500, 600])
     axes[0].tick_params(axis='both', labelsize=15)
     axes[0].margins(x=0)
@@ -212,29 +220,23 @@ def _(input_data, plt):
     axes[1].tick_params(axis='both', labelsize=15)
     axes[1].margins(x=0)
 
-    # Adjust layout
     plt.tight_layout()
-
-    # Show the plots
     plt.show()
     return
 
 
 @app.cell
 def _(input_data, np, pd, plt):
-    # @title
     data_temp = input_data.copy()
     dem = data_temp['Demand (MWh)'].values.reshape(364, 24)
     cf = data_temp['Wind Capacity Factor (p.u.)'].values.reshape(364, 24)
     dem_daily = pd.DataFrame(dem, columns=range(1, 25, 1))
     cf_daily = pd.DataFrame(cf, columns=range(1, 25, 1))
-    fig_1, axes_1 = plt.subplots(1, 2, figsize=(19, 4))
-    boxprops_red = dict(linestyle='-', linewidth=1.5, color='red')
-    # Create subplots (1 row, 2 columns)
-    medianprops_red = dict(linestyle='-', linewidth=1.5, color='black')  # Matching figsize from previous cell
-    whiskerprops_red = dict(linestyle='-', linewidth=1.5, color='red')
+
     # Boxplot properties for consistent styling
-    # Define properties for each part of the boxplot to match previous cell's color scheme
+    boxprops_red = dict(linestyle='-', linewidth=1.5, color='red')
+    medianprops_red = dict(linestyle='-', linewidth=1.5, color='black')
+    whiskerprops_red = dict(linestyle='-', linewidth=1.5, color='red')
     capprops_red = dict(linestyle='-', linewidth=1.5, color='red')
     flierprops_red = dict(marker='o', markerfacecolor='red', markersize=6, linestyle='none', alpha=0.6)
     boxprops_blue = dict(linestyle='-', linewidth=1.5, color='blue')
@@ -242,16 +244,22 @@ def _(input_data, np, pd, plt):
     whiskerprops_blue = dict(linestyle='-', linewidth=1.5, color='blue')
     capprops_blue = dict(linestyle='-', linewidth=1.5, color='blue')
     flierprops_blue = dict(marker='o', markerfacecolor='blue', markersize=6, linestyle='none', alpha=0.6)
+
+    # Create subplots (1 row, 2 columns)
+    fig_1, axes_1 = plt.subplots(1, 2, figsize=(19, 4))
+
+    # Demand Boxplot
     dem_bp = dem_daily.boxplot(ax=axes_1[0], boxprops=boxprops_red, medianprops=medianprops_red, whiskerprops=whiskerprops_red, capprops=capprops_red, flierprops=flierprops_red, return_type='dict', patch_artist=True)
     axes_1[0].set_title('Demand (MWh) Daily Distribution', fontsize=16, weight='bold')
     axes_1[0].set_xlabel('Time (hours)', fontsize=16)
     axes_1[0].tick_params(axis='both', labelsize=16)
     axes_1[0].grid(True, linestyle='--', alpha=0.7)
     axes_1[0].margins(x=0)
-    # Demand Boxplot
     for patch in dem_bp['boxes']:
         patch.set_facecolor('r')
         patch.set_alpha(0.3)
+
+    # Capacity Factor Boxplot
     cf_bp = cf_daily.boxplot(ax=axes_1[1], boxprops=boxprops_blue, medianprops=medianprops_blue, whiskerprops=whiskerprops_blue, capprops=capprops_blue, flierprops=flierprops_blue, return_type='dict', patch_artist=True)
     axes_1[1].set_title('Wind Capacity Factor (p.u.) Daily Distribution', fontsize=16, weight='bold')
     axes_1[1].set_xlabel('Time (hours)', fontsize=16)
@@ -262,11 +270,9 @@ def _(input_data, np, pd, plt):
     for patch in cf_bp['boxes']:
         patch.set_facecolor('b')
         patch.set_alpha(0.3)
+
     plt.tight_layout()
-    # Wind Capacity Factor Boxplot
-    # Adjust layout
-    # Show the plots
-    plt.show()  # Added return_type='dict' and patch_artist=True  # Setting y-ticks for CF, similar to previous cell
+    plt.show()
     return
 
 
@@ -308,27 +314,27 @@ def _(mo):
 
 @app.cell
 def _(
+    INV_COST_STOR,
+    INV_COST_THERMAL,
+    INV_COST_WIND,
+    OPER_COST_NSE,
+    OPER_COST_STOR_CH,
+    OPER_COST_STOR_DIS,
+    OPER_COST_THERMAL,
+    OPER_COST_WIND,
+    STOR_EFF_CH,
+    STOR_EFF_DIS,
+    STOR_ETP,
     T,
     input_data,
-    inv_cost_stor,
-    inv_cost_thermal,
-    inv_cost_wind,
-    oper_cost_nse,
-    oper_cost_stor_ch,
-    oper_cost_stor_dis,
-    oper_cost_thermal,
-    oper_cost_wind,
     pyo,
-    stor_eff_ch,
-    stor_eff_dis,
-    stor_etp,
 ):
     def create_full_model(input_data,T, inv_cost_wind, inv_cost_thermal, oper_cost_wind,
-                                oper_cost_thermal, oper_cost_nsp,stor_etp,inv_cost_stor):
+                          oper_cost_thermal, oper_cost_nse, stor_etp, inv_cost_stor):
         # Create optimization model
         full_model = pyo.ConcreteModel(name="Investment_Problem")
 
-        full_model.T = pyo.Set(initialize=list(range(T)))  # Set with time steps
+        full_model.T = pyo.Set(initialize=list(range(T)))
 
         # Define parameters
         full_model.demand = pyo.Param(full_model.T, initialize=input_data['Demand (MWh)'].to_dict())  # Demand (MWh)
@@ -363,7 +369,7 @@ def _(
         def eSOC_Dynamics(mdl, t):
             if t != T - 1:
                 return mdl.e_SOC[t + 1] == mdl.e_SOC[t] + (
-                            stor_eff_ch * mdl.p_storage_ch[t] - (mdl.p_storage_dis[t] / stor_eff_dis))
+                            STOR_EFF_CH * mdl.p_storage_ch[t] - (mdl.p_storage_dis[t] / STOR_EFF_DIS))
             return pyo.Constraint.Skip
 
         full_model.eSOC_Dynamics = pyo.Constraint(full_model.T, rule=eSOC_Dynamics)
@@ -373,7 +379,7 @@ def _(
             return mdl.e_SOC[0] == 0
 
         def eSOC_Boundary_end(mdl):
-            return mdl.e_SOC[T - 1] + stor_eff_ch * mdl.p_storage_ch[T - 1] - mdl.p_storage_dis[T - 1] / stor_eff_dis == mdl.e_SOC[0]
+            return mdl.e_SOC[T - 1] + STOR_EFF_CH * mdl.p_storage_ch[T - 1] - mdl.p_storage_dis[T - 1] / STOR_EFF_DIS == mdl.e_SOC[0]
 
         full_model.eSOC_start = pyo.Constraint(rule=eSOC_Boundary_start)
         full_model.eSOC_end = pyo.Constraint(rule=eSOC_Boundary_end)
@@ -406,7 +412,7 @@ def _(
         # 9. Objective function
         def obj_rule(mdl):
             return inv_cost_wind * mdl.x_wind + inv_cost_stor * mdl.x_storage + inv_cost_thermal * mdl.x_thermal \
-                + sum(oper_cost_wind * mdl.p_wind[t] + oper_cost_stor_ch * mdl.p_storage_ch[t] + oper_cost_stor_dis *
+                + sum(oper_cost_wind * mdl.p_wind[t] + OPER_COST_STOR_CH * mdl.p_storage_ch[t] + OPER_COST_STOR_DIS *
                       mdl.p_storage_dis[t] + oper_cost_thermal * mdl.p_thermal[t] + oper_cost_nse * mdl.e_ns[t] for t
                       in mdl.T)
 
@@ -417,8 +423,8 @@ def _(
         return full_model
 
     # Create and solve the model
-    full_model = create_full_model(input_data,T, inv_cost_wind, inv_cost_thermal, oper_cost_wind,
-                                oper_cost_thermal, oper_cost_nse,stor_etp,inv_cost_stor)
+    full_model = create_full_model(input_data, T, INV_COST_WIND, INV_COST_THERMAL, OPER_COST_WIND,
+                                OPER_COST_THERMAL, OPER_COST_NSE, STOR_ETP, INV_COST_STOR)
     solver = pyo.SolverFactory('highs')
     res = solver.solve(full_model)
 
@@ -449,43 +455,41 @@ def _(mo):
 
     Solving the aggregated optimization model generally results in an **output error**, i.e., a difference in the optimal objective function values between the full-scale and aggregated optimization models. The following clustering techniques are implemented to analyze their impact on the accuracy of the aggregated models:
 
-    * **K-Means clustering (rep. hours + chronology)** (`chronological_kmeans_clustering`): A widely used clustering technique, [K-Means](https://scikit-learn.org/stable/modules/generated/sklearn.cluster.KMeans.html) partitions the data into $K$ clusters by iteratively assigning each data point to the nearest centroid and updating the centroids based on the mean of the assigned samples. This process continues until convergence, minimizing the within-cluster variance (i.e., the sum of squared distances from samples to their respective centroids). Since standard clustering techniques do not preserve chronology, we include a ``chronologize`` function $^{[1]}$ twhich preserves temporal continuity by grouping only consecutive time steps assigned to the same cluster.
+    * **K-Means clustering (rep. hours + chronology)** (`chronological_kmeans_clustering`): A widely used clustering technique, [K-Means](https://scikit-learn.org/stable/modules/generated/sklearn.cluster.KMeans.html) partitions the data into $K$ clusters by iteratively assigning each data point to the nearest centroid and updating the centroids based on the mean of the assigned samples. This process continues until convergence, minimizing the within-cluster variance (i.e., the sum of squared distances from samples to their respective centroids). Since standard clustering techniques do not preserve chronology, we include a ``chronologize`` function $^{[1]}$ which preserves temporal continuity by grouping only consecutive time steps assigned to the same cluster.
 
     * **K-Means clustering (rep. days)** (`rep_clustering`): Rather than clustering individual time steps, this technique clusters complete 24-hour profiles $^{[2]}$. K-Means clustering is applied to these daily profiles, and a representative day is selected for each cluster.
 
     * **Chronological hierarchical clustering** (`CH_clustering`): A clustering technique that iteratively merges consecutive time steps with minimal Ward distance in input space$^{[3]}$. The clustering process starts with each time step constituting its cluster, and proceeds until the desired number of clusters is reached.
 
     ---
-    <small>$^{[1]}$ J. Mannhardt, L. Kunz, and G. Sansavini, "Accurately modeling long-term storage with minimum representative hours in large-scale renewable energy systems," 2025. arXiv:2512.00892. [Link](https://arxiv.org/abs/2512.00892)
+    <small>$^{[1]}$ J. Mannhardt, L. Kunz, and G. Sansavini, "Accurately modeling long-term storage with minimum representative hours in large-scale renewable energy systems," 2025. arXiv:2512.00892. [Link](https://arxiv.org/abs/2512.00892)</small>
 
-    <small>$^{[2]}$ L. Kotzur, P. Markewitz, M. Robinius, D. Stolten, "Time series aggregation for energy system design: Modeling seasonal storage," *Applied Energy*, vol. 213, pp. 123-135, Mar. 2018, doi:10.1016/j.apenergy.2018.01.023. [Link](https://www.sciencedirect.com/science/article/pii/S0306261918300242)
+    <small>$^{[2]}$ L. Kotzur, P. Markewitz, M. Robinius, D. Stolten, "Time series aggregation for energy system design: Modeling seasonal storage," *Applied Energy*, vol. 213, pp. 123-135, Mar. 2018, doi:10.1016/j.apenergy.2018.01.023. [Link](https://www.sciencedirect.com/science/article/pii/S0306261918300242)</small>
 
-    <small>$^{[3]}$ S. Pineda and J. M. Morales, "Chronological time-period clustering for optimal capacity expansion planning with storage," *IEEE Transactions on Power Systems*, vol. 33, no. 6, pp. 7162-7170, Nov. 2018, doi: 10.1109/TPWRS.2018.2842093. [Link](https://doi.org/10.1109/TPWRS.2018.2842093)
+    <small>$^{[3]}$ S. Pineda and J. M. Morales, "Chronological time-period clustering for optimal capacity expansion planning with storage," *IEEE Transactions on Power Systems*, vol. 33, no. 6, pp. 7162-7170, Nov. 2018, doi: 10.1109/TPWRS.2018.2842093. [Link](https://doi.org/10.1109/TPWRS.2018.2842093)</small>
     """)
     return
 
 
 @app.cell
-def _(KMeans, copy, input_data, np, pd):
-    # @title
-    from sklearn.preprocessing import MinMaxScaler
-    # Chronological K-Means
-
+def _(KMeans, MinMaxScaler, copy, input_data, np, pd):
     def chronlogical_kmeans_clustering(df, K):
+        """Chronological K-means clustering"""
         kmeans_labels_shifted, kmeans_centroids_shifted, kmeans_mapping_shifted = kmeans_clustering(input_data, K)
         kmeans_mapping = {i: int(kmeans_mapping_shifted[old_key]) for i, old_key in enumerate(sorted(kmeans_mapping_shifted.keys()))}
         chronological_kmeans_mapping = chronologize(kmeans_mapping)
         return chronological_kmeans_mapping
-    # Traditional K-Means
 
-    def kmeans_clustering(df, K):  # Extract the relevant features from df: Wind Capacity Factors and Demand
+    def kmeans_clustering(df, K):
+        """Traditional K-means clustering"""
         features = df[['Demand (MWh)', 'Wind Capacity Factor (p.u.)']]
         scaler = MinMaxScaler()
         scaled_features = scaler.fit_transform(features)  # Initialize and fit scaler
         kmeans = KMeans(n_clusters=K, random_state=42)
         kmeans.fit(scaled_features)
         original_scale_centroids = scaler.inverse_transform(kmeans.cluster_centers_)
-        return (kmeans.labels_, original_scale_centroids, {index: label for index, label in zip(df['Time Step Index (-)'], kmeans.labels_)})  # Perform K-means clustering with K clusters
+        # Perform K-means clustering with K clusters
+        return (kmeans.labels_, original_scale_centroids, {index: label for index, label in zip(df['Time Step Index (-)'], kmeans.labels_)})
 
     def chronologize(mapping):
         n_mapping = copy.deepcopy(mapping)
@@ -500,6 +504,7 @@ def _(KMeans, copy, input_data, np, pd):
         return n_mapping  # Create a copy of the original mapping
 
     def CH_clustering(df, K):
+        """Chronological hierarchical clustering"""
         T = len(df)
         features = df[['Demand (MWh)', 'Wind Capacity Factor (p.u.)']]
         scaler = MinMaxScaler()
@@ -507,13 +512,13 @@ def _(KMeans, copy, input_data, np, pd):
         clusters = [[i] for i in range(T)]
 
         def calc_ward_dist(idx1, idx2):
-    # Chronological hierarchical clustering
             n1 = len(clusters[idx1])
             n2 = len(clusters[idx2])  # Number of initial steps (hours)
             mean1 = scaled_features_df.iloc[clusters[idx1]].mean()
             mean2 = scaled_features_df.iloc[clusters[idx2]].mean()
             squared_dist = np.sum((mean1 - mean2) ** 2)  # Extract features for scaling
             return n1 * n2 / (n1 + n2) * squared_dist
+
         dists = [calc_ward_dist(i, i + 1) for i in range(T - 1)]
         while len(clusters) > K:
             idx = np.argmin(dists)
@@ -524,10 +529,12 @@ def _(KMeans, copy, input_data, np, pd):
                 dists[idx] = calc_ward_dist(idx, idx + 1)
             if idx > 0:  # Cluster sizes
                 dists[idx - 1] = calc_ward_dist(idx - 1, idx)
+
         mapping_dict = {}
         for cluster_id, hours in enumerate(clusters):
             for t in hours:  # Cluster means (centroids) using scaled features
                 mapping_dict[t] = cluster_id
+
         return mapping_dict
 
     def rep_clustering(inpud_data, K):  # Ward linkage formula: (n1*n2)/(n1+n2) * squared_euclidean_dist
@@ -540,36 +547,7 @@ def _(KMeans, copy, input_data, np, pd):
         km.fit(scaled_X)  # Merge until we reach K clusters
         original_scale_centroids = scaler.inverse_transform(km.cluster_centers_)
         return (km.labels_, original_scale_centroids, {index: label for index, label in zip(inpud_data['Time Step Index (-)'], km.labels_)})  # 1. Find the pair of adjacent clusters with the minimum Ward distance  # 2. Merge cluster idx+1 into cluster idx  # 3. Remove the distance corresponding to the merged pair  # 4. Update neighbors' distances  # New distance between merged cluster and the one following it  # New distance between merged cluster and the one preceding it  # Convert clusters list to the mapping dictionary for Pyomo  # Initialize and fit scaler  # Inverse transform centroids to original scale
-
-    def lagged_kmeans_clustering(df, K=500):
-        demand = df['Demand (MWh)'].values
-        wind = df['Wind Capacity Factor (p.u.)'].values
-        # Circular lag: hour 0's previous is hour T-1 (full-year wraparound)
-        demand_lag = np.roll(demand, 1)
-        wind_lag = np.roll(wind, 1)
-        features = np.column_stack([demand, wind, demand_lag, wind_lag])
-        scaler = MinMaxScaler()
-        scaled = scaler.fit_transform(features)
-        # Multiply current-hour columns by sqrt(2) so they are weighted 2x in the squared-distance objective
-        scaled[:, 0] *= np.sqrt(2)
-        scaled[:, 1] *= np.sqrt(2)
-        kmeans = KMeans(n_clusters=K, random_state=42)
-        kmeans.fit(scaled)
-        labels = kmeans.labels_
-        # Recover 2D centroids in original scale using only the current-hour features
-        centroids_4d = kmeans.cluster_centers_.copy()
-        centroids_4d[:, 0] /= np.sqrt(2)
-        centroids_4d[:, 1] /= np.sqrt(2)
-        centroids_2d = scaler.inverse_transform(centroids_4d)[:, :2]
-        mapping_dict = {i: labels[i] for i in range(len(labels))}
-        return (labels, centroids_2d, mapping_dict)
-    return (
-        CH_clustering,
-        chronologize,
-        kmeans_clustering,
-        lagged_kmeans_clustering,
-        rep_clustering,
-    )
+    return CH_clustering, chronologize, kmeans_clustering, rep_clustering
 
 
 @app.cell(hide_code=True)
@@ -644,7 +622,6 @@ def _(
     np,
     plt,
 ):
-    # @title
     R = 72  # Exemplary hours (a day)
     P = 22  # which day to show?
     # 1. Calculate aggregated means for demand and wind for each unique chronological K-Means cluster
@@ -683,9 +660,10 @@ def _(
     axes_2[0].set_xlabel('Time (hours)', fontsize=16)
     axes_2[0].set_xticks(range(1, R + 1, R // 24))  # Ensure color index is valid
     axes_2[0].set_xticklabels(range(1, R + 1, R // 24))
+
     # 5. Plotting
     axes_2[0].tick_params(axis='both', labelsize=12)
-    #fig, axes = plt.subplots(2, 1, figsize=(8, 5.8))
+
     # Plot Demand
     axes_2[0].grid(True, linestyle='--', alpha=0.7)
     axes_2[0].margins(x=0)  # Line connecting aggregated points
@@ -698,6 +676,7 @@ def _(
     scatter_wind = axes_2[1].scatter(range(1, R + 1), aggregated_wind_profile, c=aggregated_colors, s=70, marker='o', edgecolor='black', zorder=5)
     axes_2[1].set_title(f'Wind Capacity Factor (p.u.)', fontsize=16, weight='bold')
     axes_2[1].set_xlabel('Time (hours)', fontsize=16)
+
     # Create custom legend for clarity
     axes_2[1].set_xticks(range(1, R + 1, R // 24))
     axes_2[1].set_xticklabels(range(1, R + 1, R // 24))
@@ -708,10 +687,8 @@ def _(
     second_legend = axes_2[1].legend(handles=legend_lines_handles, fontsize=12)
     # Legend for K-Means cluster colors
     axes_2[1].add_artist(second_legend)
+
     plt.tight_layout()
-    #axes[0].legend(handles=legend_elements_colors, title="Cluster", title_fontsize=12, fontsize=10)
-    # Plot Wind Capacity Factor
-    #axes[1].legend(handles=legend_elements_colors,  title="Cluster", title_fontsize=12, fontsize=10)
     plt.show()  # Line connecting aggregated points  # No label here
     return (P,)
 
@@ -733,11 +710,6 @@ def _(CH_clustering, input_data):
     return (CH_mapping,)
 
 
-@app.cell
-def _():
-    return
-
-
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
@@ -748,7 +720,6 @@ def _(mo):
 
 @app.cell
 def _(CH_mapping, P, input_data, np, plt):
-    # @title
     R_1 = 72  # Exemplary hours (a day)
     aggregated_demand_means_ch = {}
     # 1. Calculate aggregated means for demand and wind for each unique CH cluster
@@ -828,11 +799,7 @@ def _(CH_mapping, P, input_data, np, plt):
     second_legend_ch = axes_3[1].legend(handles=legend_lines_handles_ch, fontsize=12)
     axes_3[1].add_artist(second_legend_ch)
     plt.tight_layout()
-    # Legend for CH cluster colors (only for clusters present in this exemplary day)
-    #if legend_elements_colors_ch: # Only add legend if there are actual clusters to show
-    #    axes[0].legend(handles=legend_elements_colors_ch, title="Cluster",loc='upper right', title_fontsize=12, fontsize=10)
-    # Plot Wind Capacity Factor
-    plt.show()  # Line connecting aggregated points  #axes[1].legend(handles=legend_elements_colors_ch, title="Cluster", title_fontsize=12, fontsize=10)
+    plt.show()
     return
 
 
@@ -849,50 +816,59 @@ def _(input_data, rep_clustering):
     K_rep = 30 # Number of desired representative days
     rep_labels_shifted, rep_centroids_shifted, rep_mapping_shifted = rep_clustering(input_data,K_rep)
     rep_mapping = {i: int(rep_mapping_shifted[old_key]) for i, old_key in enumerate(sorted(rep_mapping_shifted.keys()))}
-    # Display the mapping
 
+    # Display the mapping
     print(rep_mapping)
     return rep_centroids_shifted, rep_labels_shifted, rep_mapping
 
 
 @app.cell
 def _(input_data, plt, rep_centroids_shifted, rep_labels_shifted):
-    # @title
     R_2 = 24
     demand_profiles = input_data['Demand (MWh)'].values.reshape(-1, R_2)
     wind_profiles = input_data['Wind Capacity Factor (p.u.)'].values.reshape(-1, R_2)  # Number of hours in a representative period (a day)
     unique_cluster_ids = [5, 12, 15]
+
     # Reshape input data into daily profiles
     num_clusters = len(unique_cluster_ids)
     cmap_1 = plt.colormaps.get_cmap('viridis').resampled(num_clusters) if num_clusters <= 20 else plt.colormaps.get_cmap('rainbow').resampled(num_clusters)
     fig_4, axes_4 = plt.subplots(1, 2, figsize=(19, 4))
+
     # Get all unique cluster IDs
     centroid_handles = []
     centroid_labels = []
+
     # Choose a colormap for distinct colors for each cluster
     for idx, current_cluster_id in enumerate(unique_cluster_ids):
-    # Use a colormap suitable for categorical data, e.g., 'tab20' if num_clusters <= 20
-    # If more, use 'rainbow' or a custom cycle
+        # Use a colormap suitable for categorical data, e.g., 'tab20' if num_clusters <= 20
+        # If more, use 'rainbow' or a custom cycle
         member_day_indices = [i for i, label in enumerate(rep_labels_shifted) if label == current_cluster_id]
         if not member_day_indices:
             continue
         cluster_color = cmap_1(idx)
         centroid_demand = rep_centroids_shifted[current_cluster_id, :R_2]
         centroid_wind = rep_centroids_shifted[current_cluster_id, R_2:]
-    # Create subplots (1 row, 2 columns)
+
+        # Create subplots (1 row, 2 columns)
         member_demand_profiles = demand_profiles[member_day_indices]  # Increased width for legend, height for better visibility
         member_wind_profiles = wind_profiles[member_day_indices]
-    # Lists to hold handles for centroids for the combined legend
+
+        # Lists to hold handles for centroids for the combined legend
         for i_2, day_demand in enumerate(member_demand_profiles):
             axes_4[0].plot(range(1, R_2 + 1), day_demand, color=cluster_color, linestyle='-', linewidth=0.8, alpha=0.4)
+
         line_demand, = axes_4[0].plot(range(1, R_2 + 1), centroid_demand, color=cluster_color, linestyle='-', marker='o', markersize=6, linewidth=2.5, zorder=5, label=f'Centroid {current_cluster_id}')
         centroid_handles.append(line_demand)
         centroid_labels.append(f'Centroid {current_cluster_id}')  # Find all day indices that belong to the chosen cluster
         for i_2, day_wind in enumerate(member_wind_profiles):
             axes_4[1].plot(range(1, R_2 + 1), day_wind, color=cluster_color, linestyle='-', linewidth=0.8, alpha=0.4)
-        line_wind, = axes_4[1].plot(range(1, R_2 + 1), centroid_wind, color=cluster_color, linestyle='-', marker='o', markersize=6, linewidth=2.5, zorder=5)  # Skip if no members found for this cluster
+
+        line_wind, = axes_4[1].plot(range(1, R_2 + 1), centroid_wind, color=cluster_color, linestyle='-', marker='o', markersize=6, 
+                                    linewidth=2.5, zorder=5)  # Skip if no members found for this cluster
+
     axes_4[0].set_title(f'Demand (MWh) (Centroids vs. Members)', fontsize=16, weight='bold')
-    axes_4[0].set_xlabel('Time (hours)', fontsize=16)  # print(f"Warning: Cluster ID {current_cluster_id} has no members. Skipping plot.") # Can uncomment for debugging
+    axes_4[0].set_xlabel('Time (hours)', fontsize=16)  # print(f"Warning: Cluster ID {current_cluster_id} has no members. Skipping plot.") 
+
     axes_4[0].set_xticks(range(2, R_2 + 1, 2))
     axes_4[0].set_xticklabels(range(2, R_2 + 1, 2))
     axes_4[0].tick_params(axis='both', labelsize=14)  # Assign a color for the current cluster
@@ -907,14 +883,9 @@ def _(input_data, plt, rep_centroids_shifted, rep_labels_shifted):
     axes_4[1].grid(True, linestyle='--', alpha=0.7)
     axes_4[1].margins(x=0)
     plt.tight_layout(rect=[0, 0, 0.9, 1])  # Plot Demand for the current cluster
-    # --- Common plot settings after all clusters are plotted ---
-    # Demand plot settings
-    # Wind plot settings
-    # Create a single legend for all centroids and place it outside the plot area
-    #fig.legend(centroid_handles, centroid_labels, title="Centroids", loc='center right', bbox_to_anchor=(0.99, 0.5), ncol=1, fontsize=10)
-    # Adjust layout to prevent plot and legend from overlapping
-    # Show the plots
-    plt.show()  # Plot members with lighter color and higher transparency  # Plot centroid with a darker version of the color and a distinct marker  # Plot Wind Capacity Factor for the current cluster  # Plot members with lighter color and higher transparency  # Plot centroid with a darker version of the color and a distinct marker  # No need to add to centroid_handles for wind as one common legend will be created  # Adjust rect to make space for the legend on the right
+    plt.show()
+
+    # Plot members with lighter color and higher transparency  # Plot centroid with a darker version of the color and a distinct marker  # Plot Wind Capacity Factor for the current cluster  # Plot members with lighter color and higher transparency  # Plot centroid with a darker version of the color and a distinct marker  # No need to add to centroid_handles for wind as one common legend will be created  # Adjust rect to make space for the legend on the right
     return
 
 
@@ -943,8 +914,7 @@ def _(mo):
 
     The goal of the aggregated GEP model is to determine the optimal values of the (aggregated) decision variables $\left\{\bar{x}^\mathrm{w}, \bar{x}^\mathrm{th}, \bar{x}^\mathrm{s},\bar{p}^\mathrm{w}_k, \bar{p}^\mathrm{th}_k,\bar{p}^\mathrm{d}_k,\bar{p}^\mathrm{c}_k, \bar{e}^\mathrm{ns}_k ,\bar{e}^\mathrm{s}_k\, |\, k \in \mathcal{K}\right\}$ that minimize the objective function $\bar{J}$ defined as
 
-    $\displaystyle \bar{J} := C^{\mathrm{inv,w}} \bar{x}^\mathrm{w} + C^\mathrm{inv,th} \bar{x}^\mathrm{th} + C^\mathrm{inv,s}\bar{x}^\mathrm{s}
-    + \sum_{k=1}^{K} W_k \Big( C^\mathrm{op,w} \bar{p}^\mathrm{w}_k \Delta + C^\mathrm{op,th} \bar{p}^\mathrm{th}_k \Delta + C^\mathrm{nse} \bar{e}^\mathrm{ns}_k + C^\mathrm{c,s} \bar{p}^\mathrm{c}_k \Delta + C^\mathrm{d,s} \bar{p}^\mathrm{d}_k \Delta \Big)$,
+    $\displaystyle \bar{J} := C^{\mathrm{inv,w}} \bar{x}^\mathrm{w} + C^\mathrm{inv,th} \bar{x}^\mathrm{th} + C^\mathrm{inv,s}\bar{x}^\mathrm{s} + \sum_{k=1}^{K} W_k \Big( C^\mathrm{op,w} \bar{p}^\mathrm{w}_k \Delta + C^\mathrm{op,th} \bar{p}^\mathrm{th}_k \Delta + C^\mathrm{nse} \bar{e}^\mathrm{ns}_k + C^\mathrm{c,s} \bar{p}^\mathrm{c}_k \Delta + C^\mathrm{d,s} \bar{p}^\mathrm{d}_k \Delta \Big)$
 
     subject to the following constraints:
 
@@ -962,9 +932,9 @@ def _(mo):
 
 
 @app.cell
-def _(oper_cost_stor_ch, oper_cost_stor_dis, pyo, stor_eff_ch, stor_eff_dis):
+def _(OPER_COST_STOR_CH, OPER_COST_STOR_DIS, STOR_EFF_CH, STOR_EFF_DIS, pyo):
     def create_aggregated_model(input_data, mapping, inv_cost_wind, inv_cost_thermal, oper_cost_wind,
-                                oper_cost_thermal, oper_cost_nse,stor_etp,inv_cost_stor):
+                                oper_cost_thermal, oper_cost_nse, stor_etp, inv_cost_stor):
 
       # Create optimization model
       model = pyo.ConcreteModel(name="Aggregated Model")
@@ -988,8 +958,10 @@ def _(oper_cost_stor_ch, oper_cost_stor_dis, pyo, stor_eff_ch, stor_eff_dis):
         wind_cap_factor_mean[k] = input_data["Wind Capacity Factor (p.u.)"].iloc[indices].mean()
         demand_mean[k] = input_data["Demand (MWh)"].iloc[indices].mean()
         clusters_cardinalities[k] = len(indices)
+
       last_k = unique_clusters[-1] # Define this for constraints
       first_k = unique_clusters[0]
+
       # Define sets
       model.K = pyo.Set(initialize=list(unique_clusters))  # Set with clusters
 
@@ -1023,7 +995,7 @@ def _(oper_cost_stor_ch, oper_cost_stor_dis, pyo, stor_eff_ch, stor_eff_dis):
       # 3. Energy storage state of charge dynamics
       def eSOC(mdl, k):
         if k != last_k:
-          return mdl.aggregated_e_SOC[k+1] == mdl.aggregated_e_SOC[k] + (stor_eff_ch * mdl.aggregated_p_storage_ch[k] - (mdl.aggregated_p_storage_dis[k] / stor_eff_dis))*mdl.clusters_cardinalitie[k]
+          return mdl.aggregated_e_SOC[k+1] == mdl.aggregated_e_SOC[k] + (STOR_EFF_CH * mdl.aggregated_p_storage_ch[k] - (mdl.aggregated_p_storage_dis[k] / STOR_EFF_DIS))*mdl.clusters_cardinalitie[k]
         return pyo.Constraint.Skip
       model.eSOC = pyo.Constraint(model.K, rule=eSOC)
 
@@ -1033,7 +1005,7 @@ def _(oper_cost_stor_ch, oper_cost_stor_dis, pyo, stor_eff_ch, stor_eff_dis):
       model.eSOC_start = pyo.Constraint(rule=eSOC_Boundary_start)
 
       def eSOC_Boundary_end(mdl):
-        return mdl.aggregated_e_SOC[last_k] + (stor_eff_ch * mdl.aggregated_p_storage_ch[last_k] - (mdl.aggregated_p_storage_dis[last_k] / stor_eff_dis))*mdl.clusters_cardinalitie[last_k] == mdl.aggregated_e_SOC[first_k]
+        return mdl.aggregated_e_SOC[last_k] + (STOR_EFF_CH * mdl.aggregated_p_storage_ch[last_k] - (mdl.aggregated_p_storage_dis[last_k] / STOR_EFF_DIS))*mdl.clusters_cardinalitie[last_k] == mdl.aggregated_e_SOC[first_k]
       model.eSOC_end = pyo.Constraint(rule=eSOC_Boundary_end)
 
       # 5. Storage state of charge limits
@@ -1070,8 +1042,8 @@ def _(oper_cost_stor_ch, oper_cost_stor_dis, pyo, stor_eff_ch, stor_eff_dis):
         operational_costs = sum(
             (oper_cost_wind * mdl.aggregated_p_wind[k] +
              oper_cost_thermal * mdl.aggregated_p_thermal[k] +
-             oper_cost_stor_ch * mdl.aggregated_p_storage_ch[k] +
-             oper_cost_stor_dis * mdl.aggregated_p_storage_dis[k] +
+             OPER_COST_STOR_CH * mdl.aggregated_p_storage_ch[k] +
+             OPER_COST_STOR_DIS * mdl.aggregated_p_storage_dis[k] +
              oper_cost_nse * mdl.aggregated_e_ns[k])
              * mdl.clusters_cardinalitie[k]
             for k in mdl.K
@@ -1094,20 +1066,20 @@ def _(mo):
 
 @app.cell
 def _(
+    INV_COST_STOR,
+    INV_COST_THERMAL,
+    INV_COST_WIND,
+    OPER_COST_NSE,
+    OPER_COST_THERMAL,
+    OPER_COST_WIND,
+    STOR_ETP,
     chronological_kmeans_mapping,
     create_aggregated_model,
     input_data,
-    inv_cost_stor,
-    inv_cost_thermal,
-    inv_cost_wind,
-    oper_cost_nse,
-    oper_cost_thermal,
-    oper_cost_wind,
     pyo,
-    stor_etp,
     time,
 ):
-    aggregated_model_kmeans = create_aggregated_model(input_data, chronological_kmeans_mapping, inv_cost_wind, inv_cost_thermal, oper_cost_wind, oper_cost_thermal, oper_cost_nse, stor_etp, inv_cost_stor)
+    aggregated_model_kmeans = create_aggregated_model(input_data, chronological_kmeans_mapping, INV_COST_WIND, INV_COST_THERMAL, OPER_COST_WIND, OPER_COST_THERMAL, OPER_COST_NSE, STOR_ETP, INV_COST_STOR)
     solver_1 = pyo.SolverFactory('highs')
     # Solve pyomo model with highs
     start = time.time()
@@ -1133,19 +1105,19 @@ def _(mo):
 @app.cell
 def _(
     CH_mapping,
+    INV_COST_STOR,
+    INV_COST_THERMAL,
+    INV_COST_WIND,
+    OPER_COST_NSE,
+    OPER_COST_THERMAL,
+    OPER_COST_WIND,
+    STOR_ETP,
     create_aggregated_model,
     input_data,
-    inv_cost_stor,
-    inv_cost_thermal,
-    inv_cost_wind,
-    oper_cost_nse,
-    oper_cost_thermal,
-    oper_cost_wind,
     pyo,
-    stor_etp,
     time,
 ):
-    aggregated_model_CH = create_aggregated_model(input_data, CH_mapping, inv_cost_wind, inv_cost_thermal, oper_cost_wind, oper_cost_thermal, oper_cost_nse, stor_etp, inv_cost_stor)
+    aggregated_model_CH = create_aggregated_model(input_data, CH_mapping, INV_COST_WIND, INV_COST_THERMAL, OPER_COST_WIND, OPER_COST_THERMAL, OPER_COST_NSE, STOR_ETP, INV_COST_STOR)
     solver_2 = pyo.SolverFactory('highs')
     # Solve pyomo model with highs
     start_1 = time.time()
@@ -1158,109 +1130,6 @@ def _(
     else:
         print('No optimal solution found.')
     return (aggregated_model_CH,)
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
-    ### 5.1.3. Run the aggregated model with **Lagged K-Means clusters**
-    """)
-    return
-
-
-@app.cell
-def _(
-    create_aggregated_model,
-    input_data,
-    inv_cost_stor,
-    inv_cost_thermal,
-    inv_cost_wind,
-    lagged_kmeans_clustering,
-    oper_cost_nse,
-    oper_cost_thermal,
-    oper_cost_wind,
-    pyo,
-    stor_etp,
-    time,
-):
-    K_lagged = 500
-    lagged_labels, lagged_centroids, lagged_mapping = lagged_kmeans_clustering(input_data, K=K_lagged)
-    aggregated_model_lagged = create_aggregated_model(input_data, lagged_mapping, inv_cost_wind, inv_cost_thermal, oper_cost_wind, oper_cost_thermal, oper_cost_nse, stor_etp, inv_cost_stor)
-    solver_lagged = pyo.SolverFactory('highs')
-    start_lagged = time.time()
-    res_lagged = solver_lagged.solve(aggregated_model_lagged)
-    end_lagged = time.time()
-    print(f'Time taken: {end_lagged - start_lagged:.2f} seconds')
-    if res_lagged.solver.termination_condition == 'optimal':
-        print(f'Lagged K-Means aggregated model optimal obj. fun. value = {pyo.value(aggregated_model_lagged.obj) / 1000000.0:.2f} mln €')
-    else:
-        print('No optimal solution found.')
-    return
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
-    ### 5.1.4. Run the aggregated model with **Cheat aggregation** (dual-variable regimes)
-    """)
-    return
-
-
-@app.cell
-def _(
-    create_aggregated_model,
-    full_model,
-    input_data,
-    inv_cost_stor,
-    inv_cost_thermal,
-    inv_cost_wind,
-    oper_cost_nse,
-    oper_cost_thermal,
-    oper_cost_wind,
-    pyo,
-    stor_etp,
-    time,
-):
-    def cheat_aggregation(fm, tol=0.01):
-        """Cluster hours by their LP dual-variable regime (λ, ν, ρ).
-        Hours in the same regime have identical marginal costs, so averaging
-        their demand/wind produces zero first-order approximation error."""
-        regime_to_id = {}
-        mapping_dict = {}
-        next_id = 0
-        for t in fm.T:
-            lam = round(fm.dual.get(fm.ePower_Balance[t], 0.0) / tol) * tol
-            nu = round(fm.dual.get(fm.eWind_Limits[t], 0.0) / tol) * tol
-            rho = 0.0
-            if t in fm.eSOC_Dynamics:
-                rho = round(fm.dual.get(fm.eSOC_Dynamics[t], 0.0) / tol) * tol
-            regime = (lam, nu, rho)
-            if regime not in regime_to_id:
-                regime_to_id[regime] = next_id
-                next_id += 1
-            mapping_dict[t] = regime_to_id[regime]
-        print(f'Number of distinct regimes (clusters): {next_id}')
-        return mapping_dict
-
-    cheat_mapping = cheat_aggregation(full_model)
-    aggregated_model_cheat = create_aggregated_model(input_data, cheat_mapping, inv_cost_wind, inv_cost_thermal, oper_cost_wind, oper_cost_thermal, oper_cost_nse, stor_etp, inv_cost_stor)
-    solver_cheat = pyo.SolverFactory('highs')
-    start_cheat = time.time()
-    res_cheat = solver_cheat.solve(aggregated_model_cheat)
-    end_cheat = time.time()
-    print(f'Time taken: {end_cheat - start_cheat:.2f} seconds')
-    if res_cheat.solver.termination_condition == 'optimal':
-        print(f'Cheat aggregated model optimal obj. fun. value = {pyo.value(aggregated_model_cheat.obj) / 1000000.0:.2f} mln €')
-    else:
-        print('No optimal solution found.')
-    return aggregated_model_cheat, cheat_mapping
-
-
-@app.cell
-def _(aggregated_model_cheat, cheat_mapping, evaluate_mapping, full_model):
-    cheat_error = evaluate_mapping(cheat_mapping, full_model, aggregated_model_cheat)
-    print(f'Cheat aggregation output error: {cheat_error:.4f} %')
-    return
 
 
 @app.cell(hide_code=True)
@@ -1290,8 +1159,7 @@ def _(mo):
 
     As before, the goal of the aggregated optimization model is to determine the optimal values of the (aggregated) decision variables $\left\{\bar{x}^\mathrm{w}, \bar{x}^\mathrm{th}, \bar{x}^\mathrm{s},\bar{p}^\mathrm{w}_{d,r}, \bar{p}^\mathrm{th}_{d,r},\bar{p}^\mathrm{d}_{d,r},\bar{p}^\mathrm{c}_{d,r}, \bar{e}^\mathrm{ns}_{d,r} ,\bar{e}^\mathrm{s}_{n}, \delta\bar{e}^\mathrm{s}_{d,r}  \, |\, d \in \mathcal{D}, r \in \mathcal{R}, n \in \mathcal{N}\right\}$ that minimize the objective function $\bar{J}$, defined as
 
-    $\displaystyle \bar{J} := C^{\mathrm{inv,w}} \bar{x}^\mathrm{w} + C^\mathrm{inv,th} \bar{x}^\mathrm{th} + C^\mathrm{inv,s}\bar{x}^\mathrm{s}
-    + \sum_{d=1}^{D} W_d \sum_{r=1}^{R} \Big( C^\mathrm{op,w} \bar{p}^\mathrm{w}_{d,r} \Delta + C^\mathrm{op,th} \bar{p}^\mathrm{th}_{d,r} \Delta + C^\mathrm{nse} \bar{e}^\mathrm{ns}_{d,r} + C^\mathrm{c,s} \bar{p}^\mathrm{c}_{d,r} \Delta + C^\mathrm{d,s} \bar{p}^\mathrm{d}_{d,r} \Delta \Big)$,
+    $\displaystyle \bar{J} := C^{\mathrm{inv,w}} \bar{x}^\mathrm{w} + C^\mathrm{inv,th} \bar{x}^\mathrm{th} + C^\mathrm{inv,s}\bar{x}^\mathrm{s} + \sum_{d=1}^{D} W_d \sum_{r=1}^{R} \Big( C^\mathrm{op,w} \bar{p}^\mathrm{w}_{d,r} \Delta + C^\mathrm{op,th} \bar{p}^\mathrm{th}_{d,r} \Delta + C^\mathrm{nse} \bar{e}^\mathrm{ns}_{d,r} + C^\mathrm{c,s} \bar{p}^\mathrm{c}_{d,r} \Delta + C^\mathrm{d,s}\bar{p}^\mathrm{d}_{d,r} \Delta \Big)$
 
     subject to:
 
@@ -1314,7 +1182,7 @@ def _(mo):
 
 
 @app.cell
-def _(oper_cost_stor_ch, oper_cost_stor_dis, pyo, stor_eff_ch, stor_eff_dis):
+def _(OPER_COST_STOR_CH, OPER_COST_STOR_DIS, STOR_EFF_CH, STOR_EFF_DIS, pyo):
     def create_rep_model(input_data, mapping, R,inv_cost_wind, inv_cost_thermal, oper_cost_wind,
                                 oper_cost_thermal, oper_cost_nse, stor_etp,inv_cost_stor):
 
@@ -1370,7 +1238,7 @@ def _(oper_cost_stor_ch, oper_cost_stor_dis, pyo, stor_eff_ch, stor_eff_dis):
         def rule_intra_storage(mdl,d,  r):
             if r == R - 1: return pyo.Constraint.Skip
             return mdl.delta_e_s[d, r+1] == mdl.delta_e_s[d, r] + \
-                   (stor_eff_ch * mdl.p_c[d, r] - mdl.p_d[d, r] / stor_eff_dis)
+                   (STOR_EFF_CH * mdl.p_c[d, r] - mdl.p_d[d, r] / STOR_EFF_DIS)
         model.eintra_storage = pyo.Constraint(model.D, model.R, rule=rule_intra_storage)
 
         model.eintra_start = pyo.Constraint(model.D,
@@ -1378,8 +1246,8 @@ def _(oper_cost_stor_ch, oper_cost_stor_dis, pyo, stor_eff_ch, stor_eff_dis):
 
         # 5. Inter-day storage dynamics and boundaries
         def rule_inter_storage(mdl, n):
-          day_net_change = sum(stor_eff_ch * mdl.p_c[mapping[n], r] -
-                              mdl.p_d[mapping[n], r] / stor_eff_dis for r in mdl.R)
+          day_net_change = sum(STOR_EFF_CH * mdl.p_c[mapping[n], r] -
+                              mdl.p_d[mapping[n], r] / STOR_EFF_DIS for r in mdl.R)
 
           if n == max(model.N):
               # Cyclic constraint for the end of the year
@@ -1422,8 +1290,8 @@ def _(oper_cost_stor_ch, oper_cost_stor_dis, pyo, stor_eff_ch, stor_eff_dis):
                 (oper_cost_wind * mdl.p_w[d, r] +
                  oper_cost_thermal * mdl.p_th[d, r] +
                  oper_cost_nse * mdl.e_ns[d, r] +
-                 oper_cost_stor_ch * mdl.p_c[d, r] +
-                 oper_cost_stor_dis * mdl.p_d[d, r])
+                 OPER_COST_STOR_CH * mdl.p_c[d, r] +
+                 OPER_COST_STOR_DIS * mdl.p_d[d, r])
                 for r in mdl.R) for d in mdl.D)
             return inv + oper
 
@@ -1443,20 +1311,20 @@ def _(mo):
 
 @app.cell
 def _(
+    INV_COST_STOR,
+    INV_COST_THERMAL,
+    INV_COST_WIND,
+    OPER_COST_NSE,
+    OPER_COST_THERMAL,
+    OPER_COST_WIND,
+    STOR_ETP,
     create_rep_model,
     input_data,
-    inv_cost_stor,
-    inv_cost_thermal,
-    inv_cost_wind,
-    oper_cost_nse,
-    oper_cost_thermal,
-    oper_cost_wind,
     pyo,
     rep_mapping,
-    stor_etp,
     time,
 ):
-    rep_model = create_rep_model(input_data, rep_mapping, 24, inv_cost_wind, inv_cost_thermal, oper_cost_wind, oper_cost_thermal, oper_cost_nse, stor_etp, inv_cost_stor)
+    rep_model = create_rep_model(input_data, rep_mapping, 24, INV_COST_WIND, INV_COST_THERMAL, OPER_COST_WIND, OPER_COST_THERMAL, OPER_COST_NSE, STOR_ETP, INV_COST_STOR)
     # Solve pyomo model with highs
     solver_3 = pyo.SolverFactory('highs')
     start_2 = time.time()
@@ -1493,29 +1361,29 @@ def _(mo):
 
 @app.cell
 def _(
+    INV_COST_STOR,
+    INV_COST_THERMAL,
+    INV_COST_WIND,
+    OPER_COST_NSE,
+    OPER_COST_THERMAL,
+    OPER_COST_WIND,
+    STOR_ETP,
     create_aggregated_model,
     create_rep_model,
     input_data,
-    inv_cost_stor,
-    inv_cost_thermal,
-    inv_cost_wind,
     np,
-    oper_cost_nse,
-    oper_cost_thermal,
-    oper_cost_wind,
     plt,
     pyo,
-    stor_etp,
 ):
     def evaluate_mapping(mapping,full_model,aggregated_model = None):
       if aggregated_model is None:
         temp = len(mapping)
         if temp == 364:
-          aggregated_model = create_rep_model(input_data, mapping, 24,inv_cost_wind, inv_cost_thermal, oper_cost_wind, oper_cost_thermal, oper_cost_nse,stor_etp,inv_cost_stor)
+          aggregated_model = create_rep_model(input_data, mapping, 24,INV_COST_WIND, INV_COST_THERMAL, OPER_COST_WIND, OPER_COST_THERMAL, OPER_COST_NSE, STOR_ETP, INV_COST_STOR)
         else:
           aggregated_model =(create_aggregated_model(
-          input_data, mapping, inv_cost_wind, inv_cost_thermal, oper_cost_wind,
-          oper_cost_thermal, oper_cost_nse,stor_etp,inv_cost_stor))
+          input_data, mapping, INV_COST_WIND, INV_COST_THERMAL, OPER_COST_WIND,
+          OPER_COST_THERMAL, OPER_COST_NSE, STOR_ETP, INV_COST_STOR))
 
         # Solve pyomo model with highs
         solver = pyo.SolverFactory('highs')
@@ -1527,11 +1395,11 @@ def _(
       if aggregated_model is None:
         temp = len(mapping)
         if temp == 364:
-          aggregated_model = create_rep_model(input_data, mapping, 24,inv_cost_wind, inv_cost_thermal, oper_cost_wind, oper_cost_thermal, oper_cost_nse,stor_etp,inv_cost_stor)
+          aggregated_model = create_rep_model(input_data, mapping, 24, INV_COST_WIND, INV_COST_THERMAL, OPER_COST_WIND, OPER_COST_THERMAL, OPER_COST_NSE, STOR_ETP, INV_COST_STOR)
         else:
           aggregated_model =(create_aggregated_model(
-          input_data, mapping, inv_cost_wind, inv_cost_thermal, oper_cost_wind,
-          oper_cost_thermal, oper_cost_nse,stor_etp,inv_cost_stor))
+          input_data, mapping, INV_COST_WIND, INV_COST_THERMAL, OPER_COST_WIND,
+          OPER_COST_THERMAL, OPER_COST_NSE, STOR_ETP, INV_COST_STOR))
 
         # Solve pyomo model with highs
         solver = pyo.SolverFactory('highs')
@@ -1621,7 +1489,7 @@ def _(
     plot_investments_results,
 ):
     # Visualize investment results
-    plot_investments_results(chronological_kmeans_mapping,full_model,aggregated_model_kmeans)
+    plot_investments_results(chronological_kmeans_mapping, full_model, aggregated_model_kmeans)
     return
 
 
@@ -1636,7 +1504,7 @@ def _(mo):
 @app.cell
 def _(CH_mapping, aggregated_model_CH, evaluate_mapping, full_model):
     # Calculate Output error
-    print(f"Relative output error = {evaluate_mapping(CH_mapping,full_model,aggregated_model_CH):.2f} %")
+    print(f"Relative output error = {evaluate_mapping(CH_mapping, full_model, aggregated_model_CH):.2f} %")
     return
 
 
@@ -1658,7 +1526,7 @@ def _(mo):
 @app.cell
 def _(evaluate_mapping, full_model, kmeans_mapping, rep_model):
     # Calculate Output error
-    print(f"Relative output error = {evaluate_mapping(kmeans_mapping,full_model,rep_model):.2f} %")
+    print(f"Relative output error = {evaluate_mapping(kmeans_mapping, full_model, rep_model):.2f} %")
     return
 
 
