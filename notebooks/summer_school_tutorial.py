@@ -567,7 +567,36 @@ def _(KMeans, copy, input_data, np, pd):
         km.fit(scaled_X)  # Merge until we reach K clusters
         original_scale_centroids = scaler.inverse_transform(km.cluster_centers_)
         return (km.labels_, original_scale_centroids, {index: label for index, label in zip(inpud_data['Time Step Index (-)'], km.labels_)})  # 1. Find the pair of adjacent clusters with the minimum Ward distance  # 2. Merge cluster idx+1 into cluster idx  # 3. Remove the distance corresponding to the merged pair  # 4. Update neighbors' distances  # New distance between merged cluster and the one following it  # New distance between merged cluster and the one preceding it  # Convert clusters list to the mapping dictionary for Pyomo  # Initialize and fit scaler  # Inverse transform centroids to original scale
-    return CH_clustering, chronologize, kmeans_clustering, rep_clustering
+
+    def lagged_kmeans_clustering(df, K=500):
+        demand = df['Demand (MWh)'].values
+        wind = df['Wind Capacity Factor (p.u.)'].values
+        # Circular lag: hour 0's previous is hour T-1 (full-year wraparound)
+        demand_lag = np.roll(demand, 1)
+        wind_lag = np.roll(wind, 1)
+        features = np.column_stack([demand, wind, demand_lag, wind_lag])
+        scaler = MinMaxScaler()
+        scaled = scaler.fit_transform(features)
+        # Multiply current-hour columns by sqrt(2) so they are weighted 2x in the squared-distance objective
+        scaled[:, 0] *= np.sqrt(2)
+        scaled[:, 1] *= np.sqrt(2)
+        kmeans = KMeans(n_clusters=K, random_state=42)
+        kmeans.fit(scaled)
+        labels = kmeans.labels_
+        # Recover 2D centroids in original scale using only the current-hour features
+        centroids_4d = kmeans.cluster_centers_.copy()
+        centroids_4d[:, 0] /= np.sqrt(2)
+        centroids_4d[:, 1] /= np.sqrt(2)
+        centroids_2d = scaler.inverse_transform(centroids_4d)[:, :2]
+        mapping_dict = {i: labels[i] for i in range(len(labels))}
+        return (labels, centroids_2d, mapping_dict)
+    return (
+        CH_clustering,
+        chronologize,
+        kmeans_clustering,
+        lagged_kmeans_clustering,
+        rep_clustering,
+    )
 
 
 @app.cell(hide_code=True)
@@ -729,6 +758,11 @@ def _(CH_clustering, input_data):
     # Display the mapping
     print(CH_mapping)
     return (CH_mapping,)
+
+
+@app.cell
+def _():
+    return
 
 
 @app.cell(hide_code=True)
@@ -1151,6 +1185,109 @@ def _(
     else:
         print('No optimal solution found.')
     return (aggregated_model_CH,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### 5.1.3. Run the aggregated model with **Lagged K-Means clusters**
+    """)
+    return
+
+
+@app.cell
+def _(
+    create_aggregated_model,
+    input_data,
+    inv_cost_stor,
+    inv_cost_thermal,
+    inv_cost_wind,
+    lagged_kmeans_clustering,
+    oper_cost_nse,
+    oper_cost_thermal,
+    oper_cost_wind,
+    pyo,
+    stor_etp,
+    time,
+):
+    K_lagged = 500
+    lagged_labels, lagged_centroids, lagged_mapping = lagged_kmeans_clustering(input_data, K=K_lagged)
+    aggregated_model_lagged = create_aggregated_model(input_data, lagged_mapping, inv_cost_wind, inv_cost_thermal, oper_cost_wind, oper_cost_thermal, oper_cost_nse, stor_etp, inv_cost_stor)
+    solver_lagged = pyo.SolverFactory('highs')
+    start_lagged = time.time()
+    res_lagged = solver_lagged.solve(aggregated_model_lagged)
+    end_lagged = time.time()
+    print(f'Time taken: {end_lagged - start_lagged:.2f} seconds')
+    if res_lagged.solver.termination_condition == 'optimal':
+        print(f'Lagged K-Means aggregated model optimal obj. fun. value = {pyo.value(aggregated_model_lagged.obj) / 1000000.0:.2f} mln €')
+    else:
+        print('No optimal solution found.')
+    return (aggregated_model_lagged,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### 5.1.4. Run the aggregated model with **Cheat aggregation** (dual-variable regimes)
+    """)
+    return
+
+
+@app.cell
+def _(
+    create_aggregated_model,
+    full_model,
+    input_data,
+    inv_cost_stor,
+    inv_cost_thermal,
+    inv_cost_wind,
+    oper_cost_nse,
+    oper_cost_thermal,
+    oper_cost_wind,
+    pyo,
+    stor_etp,
+    time,
+):
+    def cheat_aggregation(fm, tol=0.01):
+        """Cluster hours by their LP dual-variable regime (λ, ν, ρ).
+        Hours in the same regime have identical marginal costs, so averaging
+        their demand/wind produces zero first-order approximation error."""
+        regime_to_id = {}
+        mapping_dict = {}
+        next_id = 0
+        for t in fm.T:
+            lam = round(fm.dual.get(fm.ePower_Balance[t], 0.0) / tol) * tol
+            nu = round(fm.dual.get(fm.eWind_Limits[t], 0.0) / tol) * tol
+            rho = 0.0
+            if t in fm.eSOC_Dynamics:
+                rho = round(fm.dual.get(fm.eSOC_Dynamics[t], 0.0) / tol) * tol
+            regime = (lam, nu, rho)
+            if regime not in regime_to_id:
+                regime_to_id[regime] = next_id
+                next_id += 1
+            mapping_dict[t] = regime_to_id[regime]
+        print(f'Number of distinct regimes (clusters): {next_id}')
+        return mapping_dict
+
+    cheat_mapping = cheat_aggregation(full_model)
+    aggregated_model_cheat = create_aggregated_model(input_data, cheat_mapping, inv_cost_wind, inv_cost_thermal, oper_cost_wind, oper_cost_thermal, oper_cost_nse, stor_etp, inv_cost_stor)
+    solver_cheat = pyo.SolverFactory('highs')
+    start_cheat = time.time()
+    res_cheat = solver_cheat.solve(aggregated_model_cheat)
+    end_cheat = time.time()
+    print(f'Time taken: {end_cheat - start_cheat:.2f} seconds')
+    if res_cheat.solver.termination_condition == 'optimal':
+        print(f'Cheat aggregated model optimal obj. fun. value = {pyo.value(aggregated_model_cheat.obj) / 1000000.0:.2f} mln €')
+    else:
+        print('No optimal solution found.')
+    return (aggregated_model_cheat, cheat_mapping)
+
+
+@app.cell
+def _(aggregated_model_cheat, cheat_mapping, evaluate_mapping, full_model):
+    cheat_error = evaluate_mapping(cheat_mapping, full_model, aggregated_model_cheat)
+    print(f'Cheat aggregation output error: {cheat_error:.4f} %')
+    return (cheat_error,)
 
 
 @app.cell(hide_code=True)
@@ -1588,9 +1725,9 @@ def _(mo):
 
 
 @app.cell
-def _(chronological_kmeans_mapping):
+def _(input_data, lagged_kmeans_clustering):
     # Here implement your mapping solution
-    my_mapping = chronological_kmeans_mapping
+    _labels, _centroids, my_mapping = lagged_kmeans_clustering(input_data, K=500)
     return (my_mapping,)
 
 
