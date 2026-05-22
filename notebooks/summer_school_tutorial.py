@@ -68,21 +68,8 @@ def _(mo):
     return
 
 
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
-    `!pip install pyomo`: Installs [Pyomo](https://www.pyomo.org/), a Python package for modeling optimization problems.
-
-    `!git clone https://github.com/JakubRybka/Tutorial_input_data.git`: Clones the GitHub repository [Tutorial_input_data](https://github.com/JakubRybka/Tutorial_input_data.git), which contains the input data for this tutorial, namely the time series for normalized demand and wind capacity factors.
-
-    Then it imports all necessary libraries.
-    """)
-    return
-
-
 @app.cell
 def _():
-    # packages added via marimo's package management: pyomo !pip install pyomo
     import pandas as pd
     import numpy as np
     from sklearn.cluster import KMeans
@@ -90,8 +77,10 @@ def _():
     import pyomo.environ as pyo
     import copy
     import time
-    import subprocess
-    return KMeans, copy, np, pd, plt, pyo, time
+    import os
+    import requests
+    from pathlib import Path
+    return KMeans, Path, copy, np, os, pd, plt, pyo, requests, time
 
 
 @app.cell(hide_code=True)
@@ -160,7 +149,9 @@ def _(mo):
     mo.md(r"""
     ## 2.2. Load input data
 
-    Load (`input_data`) from `Tutorial_input_data` directory.
+    Fetch `input_data` from `JakubRybka/Tutorial_input_data` repo if not already fetched.
+
+    Load (`input_data`) from `/data` directory.
 
     The `input_data` file is a dataframe with three columns:
 
@@ -172,9 +163,16 @@ def _(mo):
 
 
 @app.cell
-def _(pd):
+def _(Path, os, pd, requests):
+    _DATA_DIR = Path(__file__).parent / 'data'
+    if not os.path.exists(_DATA_DIR / 'input_data.xlsx'):
+        os.makedirs(_DATA_DIR, exist_ok=True)
+        input_data = requests.get('https://raw.githubusercontent.com/JakubRybka/Tutorial_input_data/main/input_data.xlsx', allow_redirects=True).content
+        input_data_path = _DATA_DIR / 'input_data.xlsx'
+        with open(input_data_path, 'wb') as f:
+            f.write(input_data)
     # Load input data
-    input_data = pd.read_excel('content/Tutorial_input_data/input_data.xlsx')
+    input_data = pd.read_excel(_DATA_DIR / 'input_data.xlsx')
 
     input_data['Demand (MWh)'] =(2 + input_data['Demand (MWh)'] *3)*100
 
@@ -182,12 +180,6 @@ def _(pd):
     # Display the first few rows of the input data
     input_data.head()
     return (input_data,)
-
-
-@app.cell
-def _(input_data):
-    input_data
-    return
 
 
 @app.cell(hide_code=True)
