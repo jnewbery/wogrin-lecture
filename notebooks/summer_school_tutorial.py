@@ -17,14 +17,6 @@ def _():
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    <a href="https://colab.research.google.com/github/jnewbery/wogrin-lecture/blob/m/Copy_of_DTU_PES_Summer_School_tutorial_wogrin.ipynb" target="_parent"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a>
-    """)
-    return
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
     # **Time Series Aggregation for Generation Expansion Planning with Energy Storage System: A Step-by-Step Tutorial**
     """)
     return
