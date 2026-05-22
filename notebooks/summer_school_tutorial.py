@@ -14,12 +14,6 @@ def _():
     return (mo,)
 
 
-@app.cell
-def _():
-    import subprocess
-    return (subprocess,)
-
-
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
@@ -87,21 +81,16 @@ def _(mo):
 
 
 @app.cell
-def _(subprocess):
+def _():
     # packages added via marimo's package management: pyomo !pip install pyomo
-    import os
-    if not os.path.exists('content/Tutorial_input_data'):
-      #! git clone https://github.com/JakubRybka/Tutorial_input_data.git
-      subprocess.call(['git', 'clone', 'https://github.com/JakubRybka/Tutorial_input_data.git'])
     import pandas as pd
     import numpy as np
     from sklearn.cluster import KMeans
     import matplotlib.pyplot as plt
     import pyomo.environ as pyo
-    from pyomo.environ import SolverFactory
     import copy
     import time
-    import seaborn as sns
+    import subprocess
     return KMeans, copy, np, pd, plt, pyo, time
 
 
@@ -1222,7 +1211,7 @@ def _(
         print(f'Lagged K-Means aggregated model optimal obj. fun. value = {pyo.value(aggregated_model_lagged.obj) / 1000000.0:.2f} mln €')
     else:
         print('No optimal solution found.')
-    return (aggregated_model_lagged,)
+    return
 
 
 @app.cell(hide_code=True)
@@ -1280,14 +1269,14 @@ def _(
         print(f'Cheat aggregated model optimal obj. fun. value = {pyo.value(aggregated_model_cheat.obj) / 1000000.0:.2f} mln €')
     else:
         print('No optimal solution found.')
-    return (aggregated_model_cheat, cheat_mapping)
+    return aggregated_model_cheat, cheat_mapping
 
 
 @app.cell
 def _(aggregated_model_cheat, cheat_mapping, evaluate_mapping, full_model):
     cheat_error = evaluate_mapping(cheat_mapping, full_model, aggregated_model_cheat)
     print(f'Cheat aggregation output error: {cheat_error:.4f} %')
-    return (cheat_error,)
+    return
 
 
 @app.cell(hide_code=True)
