@@ -196,7 +196,6 @@ def _(mo):
 
 @app.cell
 def _(input_data, plt):
-    # @title
     # Create subplots (1 row, 2 columns)
     fig, axes = plt.subplots(1, 2, figsize=(14, 4))
 
@@ -220,6 +219,7 @@ def _(input_data, plt):
     axes[1].tick_params(axis='both', labelsize=15)
     axes[1].margins(x=0)
 
+    # Display plots
     plt.tight_layout()
     plt.show()
     return
@@ -271,6 +271,7 @@ def _(input_data, np, pd, plt):
         patch.set_facecolor('b')
         patch.set_alpha(0.3)
 
+    # Display plots
     plt.tight_layout()
     plt.show()
     return
@@ -482,71 +483,111 @@ def _(KMeans, MinMaxScaler, copy, input_data, np, pd):
 
     def kmeans_clustering(df, K):
         """Traditional K-means clustering"""
+        # Extract the relevant features from df: Wind Capacity Factors and Demand
         features = df[['Demand (MWh)', 'Wind Capacity Factor (p.u.)']]
+
+        # Initialize and fit scaler
         scaler = MinMaxScaler()
-        scaled_features = scaler.fit_transform(features)  # Initialize and fit scaler
+        scaled_features = scaler.fit_transform(features)
+
+        # Perform K-means clustering with K clusters
         kmeans = KMeans(n_clusters=K, random_state=42)
         kmeans.fit(scaled_features)
+
+        # Inverse transform centroids to original scale
         original_scale_centroids = scaler.inverse_transform(kmeans.cluster_centers_)
-        # Perform K-means clustering with K clusters
+
+        # Create a mapping of time step index to cluster assignments
         return (kmeans.labels_, original_scale_centroids, {index: label for index, label in zip(df['Time Step Index (-)'], kmeans.labels_)})
 
     def chronologize(mapping):
+        """Make any mapping chronological"""
+        # Create a copy of the original mapping
         n_mapping = copy.deepcopy(mapping)
-        it = 0  # Inverse transform centroids to original scale
+        it = 0
         for i in range(len(mapping)):
             if i == 0 or mapping[i] != mapping[i - 1]:
-                it = it + 1  # Create a mapping of time step index to cluster assignments
+                it = it + 1
                 n_mapping[i] = it
             else:
-    # Function to make any mapping chronological
                 n_mapping[i] = it
-        return n_mapping  # Create a copy of the original mapping
+        return n_mapping
 
     def CH_clustering(df, K):
         """Chronological hierarchical clustering"""
+        # Number of initial steps (hours)
         T = len(df)
+    
+        # Extract features for scaling
         features = df[['Demand (MWh)', 'Wind Capacity Factor (p.u.)']]
         scaler = MinMaxScaler()
         scaled_features_df = pd.DataFrame(scaler.fit_transform(features), columns=features.columns, index=df.index)
+    
+        # Initially, every hour is its own cluster
+        # clusters[i] stores the list of original indices (t)
         clusters = [[i] for i in range(T)]
 
         def calc_ward_dist(idx1, idx2):
+            # Cluster sizes
             n1 = len(clusters[idx1])
-            n2 = len(clusters[idx2])  # Number of initial steps (hours)
+            n2 = len(clusters[idx2])
+        
+            # Cluster means (centroids) using scaled features
             mean1 = scaled_features_df.iloc[clusters[idx1]].mean()
             mean2 = scaled_features_df.iloc[clusters[idx2]].mean()
-            squared_dist = np.sum((mean1 - mean2) ** 2)  # Extract features for scaling
+        
+            # Ward linkage formula: (n1*n2)/(n1+n2) * squared_euclidean_dist
+            squared_dist = np.sum((mean1 - mean2) ** 2)
             return n1 * n2 / (n1 + n2) * squared_dist
 
+        # Calculate initial distances between all adjacent clusters
         dists = [calc_ward_dist(i, i + 1) for i in range(T - 1)]
+    
+        # Merge until we reach K clusters
         while len(clusters) > K:
+            # 1. Find the pair of adjacent clusters with the minimum Ward distance
             idx = np.argmin(dists)
-            clusters[idx].extend(clusters[idx + 1])  # Initially, every hour is its own cluster
-            clusters.pop(idx + 1)  # clusters[i] stores the list of original indices (t)
+
+            # 2. Merge cluster idx+1 into cluster idx
+            clusters[idx].extend(clusters[idx + 1])  
+            clusters.pop(idx + 1)
+
+            # 3. Remove the distance corresponding to the merged pair
             dists.pop(idx)
+
+            # 4. Update neighbors' distances
+            # New distance between merged cluster and the one following it
             if idx < len(clusters) - 1:
                 dists[idx] = calc_ward_dist(idx, idx + 1)
-            if idx > 0:  # Cluster sizes
+
+            # New distance between merged cluster and the one preceding it
+            if idx > 0:
                 dists[idx - 1] = calc_ward_dist(idx - 1, idx)
 
+        # Convert clusters list to the mapping dictionary for Pyomo
         mapping_dict = {}
         for cluster_id, hours in enumerate(clusters):
-            for t in hours:  # Cluster means (centroids) using scaled features
+            for t in hours:
                 mapping_dict[t] = cluster_id
 
         return mapping_dict
 
-    def rep_clustering(inpud_data, K):  # Ward linkage formula: (n1*n2)/(n1+n2) * squared_euclidean_dist
+    def rep_clustering(inpud_data, K):
         cf = inpud_data['Wind Capacity Factor (p.u.)'].values.reshape(364, 24)
         demand = inpud_data['Demand (MWh)'].values.reshape(364, 24)
         X = np.concatenate([demand, cf], axis=1)
-        scaler = MinMaxScaler()  # Calculate initial distances between all adjacent clusters
+
+        # Initialize and fit scaler
+        scaler = MinMaxScaler()
         scaled_X = scaler.fit_transform(X)
+    
         km = KMeans(n_clusters=K, random_state=42)
-        km.fit(scaled_X)  # Merge until we reach K clusters
+        km.fit(scaled_X)
+
+        # Inverse transform centroids to original scale
         original_scale_centroids = scaler.inverse_transform(km.cluster_centers_)
-        return (km.labels_, original_scale_centroids, {index: label for index, label in zip(inpud_data['Time Step Index (-)'], km.labels_)})  # 1. Find the pair of adjacent clusters with the minimum Ward distance  # 2. Merge cluster idx+1 into cluster idx  # 3. Remove the distance corresponding to the merged pair  # 4. Update neighbors' distances  # New distance between merged cluster and the one following it  # New distance between merged cluster and the one preceding it  # Convert clusters list to the mapping dictionary for Pyomo  # Initialize and fit scaler  # Inverse transform centroids to original scale
+    
+        return (km.labels_, original_scale_centroids, {index: label for index, label in zip(inpud_data['Time Step Index (-)'], km.labels_)})
     return CH_clustering, chronologize, kmeans_clustering, rep_clustering
 
 
@@ -561,11 +602,12 @@ def _(mo):
 @app.cell
 def _(chronologize, input_data, kmeans_clustering):
     # K-Means representative hours clustering
-    K = 3 # Number of desired clusters (before chronologizing)
+    K = 3  # Number of desired clusters (before chronologizing)
     kmeans_labels_shifted, kmeans_centroids_shifted, kmeans_mapping_shifted = kmeans_clustering(input_data, K)
 
     kmeans_mapping = {i: int(kmeans_mapping_shifted[old_key]) for i, old_key in enumerate(sorted(kmeans_mapping_shifted.keys()))}
     chronological_kmeans_mapping = chronologize(kmeans_mapping)
+
     # Display the mapping
     print(f"Number of clusters in chronological mapping: {len(set(chronological_kmeans_mapping.values()))}")
     print(chronological_kmeans_mapping)
@@ -579,9 +621,15 @@ def _(chronologize, input_data, kmeans_clustering):
 
 
 @app.cell
+def _(mo):
+    mo.md(r"""
+    **Figure: K-Means clustering**
+    """)
+    return
+
+
+@app.cell
 def _(K, input_data, kmeans_centroids_shifted, kmeans_labels_shifted, np, plt):
-    # @title
-    # Figure: K-Means clustering
     cluster_colors = ['red', 'limegreen', 'orange', 'magenta', 'darkgray']
     plt.figure(figsize=(7, 5))
     scatter = plt.scatter(input_data['Demand (MWh)'], input_data['Wind Capacity Factor (p.u.)'],
@@ -624,72 +672,85 @@ def _(
 ):
     R = 72  # Exemplary hours (a day)
     P = 22  # which day to show?
+
     # 1. Calculate aggregated means for demand and wind for each unique chronological K-Means cluster
     aggregated_demand_means = {}
     aggregated_wind_means = {}
     unique_chrono_clusters = sorted(list(set(chronological_kmeans_mapping.values())))
+
     for k_chrono in unique_chrono_clusters:
+        # Get original time indices that map to this chronologized cluster
         original_indices_in_chrono_cluster = [t for t, cluster_id in chronological_kmeans_mapping.items() if cluster_id == k_chrono]
-        if original_indices_in_chrono_cluster:  # Get original time indices that map to this chronologized cluster
+    
+        if original_indices_in_chrono_cluster:
             aggregated_demand_means[k_chrono] = input_data['Demand (MWh)'].iloc[original_indices_in_chrono_cluster].mean()
             aggregated_wind_means[k_chrono] = input_data['Wind Capacity Factor (p.u.)'].iloc[original_indices_in_chrono_cluster].mean()
         else:
-            aggregated_demand_means[k_chrono] = 0.0
-            aggregated_wind_means[k_chrono] = 0.0
-    exemplary_start_idx = P * R
-    exemplary_hours = range(exemplary_start_idx, exemplary_start_idx + R)  # Fallback
-    original_demand_profile = input_data['Demand (MWh)'].iloc[exemplary_hours].values  # Fallback
-    original_wind_profile = input_data['Wind Capacity Factor (p.u.)'].iloc[exemplary_hours].values
+            aggregated_demand_means[k_chrono] = 0.0  # Fallback
+            aggregated_wind_means[k_chrono] = 0.0  # Fallback
+
     # 2. Select an exemplary 24-hour period (e.g., the first day)
-    aggregated_demand_profile = np.zeros(R)  # Starting from the first hour of the dataset
+    exemplary_start_idx = P * R  # Starting from the first hour of the dataset
+    exemplary_hours = range(exemplary_start_idx, exemplary_start_idx + R)
+
+    # 3. Extract original demand and wind for the exemplary period
+    original_demand_profile = input_data['Demand (MWh)'].iloc[exemplary_hours].values
+    original_wind_profile = input_data['Wind Capacity Factor (p.u.)'].iloc[exemplary_hours].values
+
+    # 4. Prepare aggregated profiles for the exemplary period
+    aggregated_demand_profile = np.zeros(R)
     aggregated_wind_profile = np.zeros(R)
     aggregated_colors = []
-    # 3. Extract original demand and wind for the exemplary period
+
     for i, t in enumerate(exemplary_hours):
         chrono_cluster_id = chronological_kmeans_mapping[t]
         original_kmeans_cluster_id = kmeans_mapping[t]
-    # 4. Prepare aggregated profiles for the exemplary period
         aggregated_demand_profile[i] = aggregated_demand_means[chrono_cluster_id]
         aggregated_wind_profile[i] = aggregated_wind_means[chrono_cluster_id]
         aggregated_colors.append(cluster_colors[original_kmeans_cluster_id % len(cluster_colors)])
-    fig_2, axes_2 = plt.subplots(1, 2, figsize=(19, 4))
-    axes_2[0].plot(range(1, R + 1), original_demand_profile, color='gray', linestyle='--', linewidth=1.5, alpha=0.7, label='Original Profile')
-    axes_2[0].plot(range(1, R + 1), aggregated_demand_profile, color='black', linestyle='-', linewidth=2, zorder=4)
-    scatter_demand = axes_2[0].scatter(range(1, R + 1), aggregated_demand_profile, c=aggregated_colors, s=70, marker='o', edgecolor='black', zorder=5)  # Use this for coloring based on initial K-Means cluster
-    axes_2[0].set_title(f'Demand (MWh)', fontsize=16, weight='bold')
-    axes_2[0].set_xlabel('Time (hours)', fontsize=16)
-    axes_2[0].set_xticks(range(1, R + 1, R // 24))  # Ensure color index is valid
-    axes_2[0].set_xticklabels(range(1, R + 1, R // 24))
 
     # 5. Plotting
-    axes_2[0].tick_params(axis='both', labelsize=12)
-
+    _fig, _axes = plt.subplots(1, 2, figsize=(19, 4))
     # Plot Demand
-    axes_2[0].grid(True, linestyle='--', alpha=0.7)
-    axes_2[0].margins(x=0)  # Line connecting aggregated points
-    legend_lines_handles = [plt.Line2D([0], [0], color='gray', linestyle='--', linewidth=1.5, label='Original Profile'), plt.Line2D([0], [0], color='black', linestyle='-', marker='o', markerfacecolor='black', markeredgecolor='black', markersize=7, label='Aggregated Profile')]  # No label here, legend will be built manually
-    first_legend = axes_2[0].legend(handles=legend_lines_handles, fontsize=12)
-    axes_2[0].add_artist(first_legend)
-    legend_elements_colors = [plt.Line2D([0], [0], marker='o', color='w', label=f'{cid}', markerfacecolor=cluster_colors[cid], markersize=10) for cid in sorted(set(kmeans_mapping.values()))]
-    axes_2[1].plot(range(1, R + 1), original_wind_profile, color='gray', linestyle='--', linewidth=1.5, alpha=0.7, label='Original Profile')
-    axes_2[1].plot(range(1, R + 1), aggregated_wind_profile, color='black', linestyle='-', linewidth=2, zorder=4)
-    scatter_wind = axes_2[1].scatter(range(1, R + 1), aggregated_wind_profile, c=aggregated_colors, s=70, marker='o', edgecolor='black', zorder=5)
-    axes_2[1].set_title(f'Wind Capacity Factor (p.u.)', fontsize=16, weight='bold')
-    axes_2[1].set_xlabel('Time (hours)', fontsize=16)
+    _axes[0].plot(range(1, R + 1), original_demand_profile, color='gray', linestyle='--', linewidth=1.5, alpha=0.7, label='Original Profile')
+    _axes[0].plot(range(1, R + 1), aggregated_demand_profile, color='black', linestyle='-', linewidth=2, zorder=4)  # Line connecting aggregated points
+    scatter_demand = _axes[0].scatter(range(1, R + 1), aggregated_demand_profile, c=aggregated_colors, s=70, marker='o', edgecolor='black', zorder=5)  # No label here, legend will be built manually
+    _axes[0].set_title(f'Demand (MWh)', fontsize=16, weight='bold')
+    _axes[0].set_xlabel('Time (hours)', fontsize=16)
+    _axes[0].set_xticks(range(1, R + 1, R // 24))  # Ensure color index is valid
+    _axes[0].set_xticklabels(range(1, R + 1, R // 24))
+    _axes[0].tick_params(axis='both', labelsize=12)
+    _axes[0].grid(True, linestyle='--', alpha=0.7)
+    _axes[0].margins(x=0)
 
     # Create custom legend for clarity
-    axes_2[1].set_xticks(range(1, R + 1, R // 24))
-    axes_2[1].set_xticklabels(range(1, R + 1, R // 24))
-    axes_2[1].set_yticks(np.arange(0, 1.1, 0.2))  # Updated to show line and marker
-    axes_2[1].tick_params(axis='both', labelsize=12)
-    axes_2[1].grid(True, linestyle='--', alpha=0.7)
-    axes_2[1].margins(x=0)
-    second_legend = axes_2[1].legend(handles=legend_lines_handles, fontsize=12)
-    # Legend for K-Means cluster colors
-    axes_2[1].add_artist(second_legend)
+    legend_lines_handles = [plt.Line2D([0], [0], color='gray', linestyle='--', linewidth=1.5, label='Original Profile'), plt.Line2D([0], [0], color='black', linestyle='-', marker='o', markerfacecolor='black', markeredgecolor='black', markersize=7, label='Aggregated Profile')]
+    first_legend = _axes[0].legend(handles=legend_lines_handles, fontsize=12)
+    _axes[0].add_artist(first_legend)
 
+    # Legend for K-Means cluster colors
+    legend_elements_colors = [plt.Line2D([0], [0], marker='o', color='w', label=f'{cid}', markerfacecolor=cluster_colors[cid], markersize=10) for cid in sorted(set(kmeans_mapping.values()))]
+
+    # Plot wind capacity factor
+    _axes[1].plot(range(1, R + 1), original_wind_profile, color='gray', linestyle='--', linewidth=1.5, alpha=0.7, label='Original Profile')
+    _axes[1].plot(range(1, R + 1), aggregated_wind_profile, color='black', linestyle='-', linewidth=2, zorder=4)  # Line connecting aggregated points
+    scatter_wind = _axes[1].scatter(range(1, R + 1), aggregated_wind_profile, c=aggregated_colors, s=70, marker='o', edgecolor='black', zorder=5)  # No label here
+    _axes[1].set_title(f'Wind Capacity Factor (p.u.)', fontsize=16, weight='bold')
+    _axes[1].set_xlabel('Time (hours)', fontsize=16)
+
+    _axes[1].set_xticks(range(1, R + 1, R // 24))
+    _axes[1].set_xticklabels(range(1, R + 1, R // 24))
+    _axes[1].set_yticks(np.arange(0, 1.1, 0.2))  # Updated to show line and marker
+    _axes[1].tick_params(axis='both', labelsize=12)
+    _axes[1].grid(True, linestyle='--', alpha=0.7)
+    _axes[1].margins(x=0)
+
+    second_legend = _axes[1].legend(handles=legend_lines_handles, fontsize=12)
+    _axes[1].add_artist(second_legend)
+
+    # Display plot
     plt.tight_layout()
-    plt.show()  # Line connecting aggregated points  # No label here
+    plt.show()
     return (P,)
 
 
@@ -705,7 +766,8 @@ def _(mo):
 def _(CH_clustering, input_data):
     K_CH = 720 # Number of desired clusters
     CH_mapping = CH_clustering(input_data, K_CH)
-    # Display the mapping
+
+    # Display mapping
     print(CH_mapping)
     return (CH_mapping,)
 
@@ -721,83 +783,102 @@ def _(mo):
 @app.cell
 def _(CH_mapping, P, input_data, np, plt):
     R_1 = 72  # Exemplary hours (a day)
-    aggregated_demand_means_ch = {}
+
     # 1. Calculate aggregated means for demand and wind for each unique CH cluster
+    aggregated_demand_means_ch = {}
     aggregated_wind_means_ch = {}
     unique_ch_clusters = sorted(list(set(CH_mapping.values())))
+
     for k_ch in unique_ch_clusters:
+        # Get original time indices that map to this CH cluster
         original_indices_in_ch_cluster = [t for t, cluster_id in CH_mapping.items() if cluster_id == k_ch]
         if original_indices_in_ch_cluster:
-            aggregated_demand_means_ch[k_ch] = input_data['Demand (MWh)'].iloc[original_indices_in_ch_cluster].mean()  # Get original time indices that map to this CH cluster
+            aggregated_demand_means_ch[k_ch] = input_data['Demand (MWh)'].iloc[original_indices_in_ch_cluster].mean()
             aggregated_wind_means_ch[k_ch] = input_data['Wind Capacity Factor (p.u.)'].iloc[original_indices_in_ch_cluster].mean()
         else:
-            aggregated_demand_means_ch[k_ch] = 0.0
-            aggregated_wind_means_ch[k_ch] = 0.0
-    random_day = P
-    exemplary_start_idx_1 = P * R_1
-    exemplary_hours_1 = range(exemplary_start_idx_1, exemplary_start_idx_1 + R_1)  # Fallback
-    original_demand_profile_ch = input_data['Demand (MWh)'].iloc[exemplary_hours_1].values  # Fallback
-    original_wind_profile_ch = input_data['Wind Capacity Factor (p.u.)'].iloc[exemplary_hours_1].values
+            aggregated_demand_means_ch[k_ch] = 0.0  # Fallback
+            aggregated_wind_means_ch[k_ch] = 0.0  # Fallback
+
     # 2. Select an exemplary 24-hour period (e.g., a random day)
-    aggregated_demand_profile_ch = np.zeros(R_1)  # Ensures we pick a full day
+    random_day = P  # Ensures we pick a full day
+    exemplary_start_idx_1 = P * R_1
+    exemplary_hours_1 = range(exemplary_start_idx_1, exemplary_start_idx_1 + R_1)
+
+    # 3. Extract original demand and wind for the exemplary period
+    original_demand_profile_ch = input_data['Demand (MWh)'].iloc[exemplary_hours_1].values
+    original_wind_profile_ch = input_data['Wind Capacity Factor (p.u.)'].iloc[exemplary_hours_1].values
+
+    # 4. Prepare aggregated profiles for the exemplary period
+    aggregated_demand_profile_ch = np.zeros(R_1)
     aggregated_wind_profile_ch = np.zeros(R_1)
     aggregated_colors_ch = []
     unique_clusters_in_day_ch = set()
-    # 3. Extract original demand and wind for the exemplary period
+
     for i_1, t_1 in enumerate(exemplary_hours_1):
         ch_cluster_id = CH_mapping[t_1]
         aggregated_demand_profile_ch[i_1] = aggregated_demand_means_ch[ch_cluster_id]
-    # 4. Prepare aggregated profiles for the exemplary period
+
         aggregated_wind_profile_ch[i_1] = aggregated_wind_means_ch[ch_cluster_id]
         unique_clusters_in_day_ch.add(ch_cluster_id)
-        aggregated_colors_ch.append(ch_cluster_id)
+        aggregated_colors_ch.append(ch_cluster_id)  # Store the cluster ID for coloring
+
+    # Map cluster IDs to colors using a cyclical colormap for better visual distinction
+    # Using 'tab10' for up to 10 distinct colors, or cycle if more
     num_unique_clusters_in_day = len(unique_clusters_in_day_ch)
     if num_unique_clusters_in_day <= 10 and num_unique_clusters_in_day > 0:
         cmap = plt.colormaps.get_cmap('tab10')
+        # Create a consistent mapping from cluster ID to colormap index
         cluster_id_to_idx = {cid: i for i, cid in enumerate(sorted(list(unique_clusters_in_day_ch)))}
         color_map_func = lambda cluster_id: cmap(cluster_id_to_idx[cluster_id])
     elif num_unique_clusters_in_day > 0:
+        # Cycle through a predefined list of colors if too many unique clusters in the day
         basic_colors = ['red', 'green', 'blue', 'purple', 'orange', 'brown', 'pink', 'gray', 'olive', 'cyan']
-        color_map_func = lambda cluster_id: basic_colors[list(unique_clusters_in_day_ch).index(cluster_id) % len(basic_colors)]  # Store the cluster ID for coloring
+        color_map_func = lambda cluster_id: basic_colors[list(unique_clusters_in_day_ch).index(cluster_id) % len(basic_colors)]  
     else:
-    # Map cluster IDs to colors using a cyclical colormap for better visual distinction
-    # Using 'tab10' for up to 10 distinct colors, or cycle if more
-        color_map_func = lambda cluster_id: 'black'
+        # Handle case with no clusters in the exemplary day (should not happen for R=24 usually)
+        color_map_func = lambda cluster_id: 'black'  # Default color if no clusters
+
     final_aggregated_colors_ch = [color_map_func(cid) for cid in aggregated_colors_ch]
+
+    # 5. Plotting
     fig_3, axes_3 = plt.subplots(1, 2, figsize=(19, 4))
-    axes_3[0].plot(range(1, R_1 + 1), original_demand_profile_ch, color='gray', linestyle='--', linewidth=1.5, alpha=0.7, label='Original Profile')  # Create a consistent mapping from cluster ID to colormap index
-    axes_3[0].plot(range(1, R_1 + 1), aggregated_demand_profile_ch, color='black', linestyle='-', linewidth=2, zorder=4)
+
+    # Plot Demand
+    axes_3[0].plot(range(1, R_1 + 1), original_demand_profile_ch, color='gray', linestyle='--', linewidth=1.5, alpha=0.7, label='Original Profile')
+    axes_3[0].plot(range(1, R_1 + 1), aggregated_demand_profile_ch, color='black', linestyle='-', linewidth=2, zorder=4)  # Line connecting aggregated points
     scatter_demand_ch = axes_3[0].scatter(range(1, R_1 + 1), aggregated_demand_profile_ch, c=final_aggregated_colors_ch, s=70, marker='o', edgecolor='black', zorder=5)
     axes_3[0].set_title(f'Demand (MWh)', fontsize=16, weight='bold')
-    axes_3[0].set_xlabel('Time (hours)', fontsize=16)  # Cycle through a predefined list of colors if too many unique clusters in the day
+    axes_3[0].set_xlabel('Time (hours)', fontsize=16)
     axes_3[0].set_xticks(range(1, R_1 + 1, R_1 // 24))
     axes_3[0].tick_params(axis='both', labelsize=14)
     axes_3[0].grid(True, linestyle='--', alpha=0.7)
-    axes_3[0].margins(x=0)  # Handle case with no clusters in the exemplary day (should not happen for R=24 usually)
-    legend_lines_handles_ch = [plt.Line2D([0], [0], color='gray', linestyle='--', linewidth=1.5, label='Original Profile'), plt.Line2D([0], [0], color='black', linestyle='-', marker='o', markerfacecolor='black', markeredgecolor='black', markersize=7, label='Aggregated Profile')]  # Default color if no clusters
+    axes_3[0].margins(x=0)
+
+    # Create custom legend for clarity (similar to K-Means plot)
+    legend_lines_handles_ch = [plt.Line2D([0], [0], color='gray', linestyle='--', linewidth=1.5, label='Original Profile'), plt.Line2D([0], [0], color='black', linestyle='-', marker='o', markerfacecolor='black', markeredgecolor='black', markersize=7, label='Aggregated Profile')]  
     first_legend_ch = axes_3[0].legend(handles=legend_lines_handles_ch, fontsize=12)
     axes_3[0].add_artist(first_legend_ch)
     legend_elements_colors_ch = []
-    # 5. Plotting
+
     for cid in sorted(list(unique_clusters_in_day_ch)):
         legend_elements_colors_ch.append(plt.Line2D([0], [0], marker='o', color='w', label=f'{cid}', markerfacecolor=color_map_func(cid), markersize=10))
-    # Plot Demand
+
+    # Plot Wind Capacity Factor
     axes_3[1].plot(range(1, R_1 + 1), original_wind_profile_ch, color='gray', linestyle='--', linewidth=1.5, alpha=0.7, label='Original Profile')
-    axes_3[1].plot(range(1, R_1 + 1), aggregated_wind_profile_ch, color='black', linestyle='-', linewidth=2, zorder=4)  # Line connecting aggregated points
+    axes_3[1].plot(range(1, R_1 + 1), aggregated_wind_profile_ch, color='black', linestyle='-', linewidth=2, zorder=4)
     scatter_wind_ch = axes_3[1].scatter(range(1, R_1 + 1), aggregated_wind_profile_ch, c=final_aggregated_colors_ch, s=70, marker='o', edgecolor='black', zorder=5)
     axes_3[1].set_title(f'Wind Capacity Factor (p.u.)', fontsize=16, weight='bold')
     axes_3[1].set_xlabel('Time (hours)', fontsize=16)
     axes_3[1].set_xticks(range(1, R_1 + 1, R_1 // 24))
-    #axes[0].set_xticklabels(range(1, R + 1, 1))
-    #axes[0].set_yticks(np.arange(0, 1.1, 0.2))
     axes_3[1].set_xticklabels(range(1, R_1 + 1, R_1 // 24))
     axes_3[1].set_yticks(np.arange(0, 1.1, 0.2))
     axes_3[1].tick_params(axis='both', labelsize=12)
     axes_3[1].grid(True, linestyle='--', alpha=0.7)
-    # Create custom legend for clarity (similar to K-Means plot)
     axes_3[1].margins(x=0)
     second_legend_ch = axes_3[1].legend(handles=legend_lines_handles_ch, fontsize=12)
     axes_3[1].add_artist(second_legend_ch)
+
+    # Display plot
     plt.tight_layout()
     plt.show()
     return
@@ -814,78 +895,102 @@ def _(mo):
 @app.cell
 def _(input_data, rep_clustering):
     K_rep = 30 # Number of desired representative days
+
     rep_labels_shifted, rep_centroids_shifted, rep_mapping_shifted = rep_clustering(input_data,K_rep)
     rep_mapping = {i: int(rep_mapping_shifted[old_key]) for i, old_key in enumerate(sorted(rep_mapping_shifted.keys()))}
 
-    # Display the mapping
+    # Display mapping
     print(rep_mapping)
     return rep_centroids_shifted, rep_labels_shifted, rep_mapping
 
 
 @app.cell
 def _(input_data, plt, rep_centroids_shifted, rep_labels_shifted):
-    R_2 = 24
-    demand_profiles = input_data['Demand (MWh)'].values.reshape(-1, R_2)
-    wind_profiles = input_data['Wind Capacity Factor (p.u.)'].values.reshape(-1, R_2)  # Number of hours in a representative period (a day)
-    unique_cluster_ids = [5, 12, 15]
+    R_2 = 24  # Number of hours in a representative period (a day)
 
     # Reshape input data into daily profiles
-    num_clusters = len(unique_cluster_ids)
-    cmap_1 = plt.colormaps.get_cmap('viridis').resampled(num_clusters) if num_clusters <= 20 else plt.colormaps.get_cmap('rainbow').resampled(num_clusters)
-    fig_4, axes_4 = plt.subplots(1, 2, figsize=(19, 4))
+    demand_profiles = input_data['Demand (MWh)'].values.reshape(-1, R_2)
+    wind_profiles = input_data['Wind Capacity Factor (p.u.)'].values.reshape(-1, R_2)
 
     # Get all unique cluster IDs
+    unique_cluster_ids = [5, 12, 15]
+
+    # Choose a colormap for distinct colors for each cluster
+    num_clusters = len(unique_cluster_ids)
+    # Use a colormap suitable for categorical data, e.g., 'tab20' if num_clusters <= 20
+    # If more, use 'rainbow' or a custom cycle
+    cmap_1 = plt.colormaps.get_cmap('viridis').resampled(num_clusters) if num_clusters <= 20 else plt.colormaps.get_cmap('rainbow').resampled(num_clusters)
+
+    # Create subplots (1 row, 2 columns)
+    fig_4, axes_4 = plt.subplots(1, 2, figsize=(19, 4))  # Increased width for legend, height for better visibility
+
+    # Lists to hold handles for centroids for the combined legend
     centroid_handles = []
     centroid_labels = []
 
-    # Choose a colormap for distinct colors for each cluster
+
     for idx, current_cluster_id in enumerate(unique_cluster_ids):
-        # Use a colormap suitable for categorical data, e.g., 'tab20' if num_clusters <= 20
-        # If more, use 'rainbow' or a custom cycle
+        # Find all day indices that belong to the chosen cluster
         member_day_indices = [i for i, label in enumerate(rep_labels_shifted) if label == current_cluster_id]
+
+        # Skip if no members found for this cluster
         if not member_day_indices:
             continue
+
+        # Assign a color for the current cluster
         cluster_color = cmap_1(idx)
+
+        # Extract centroid data for the chosen cluster
         centroid_demand = rep_centroids_shifted[current_cluster_id, :R_2]
         centroid_wind = rep_centroids_shifted[current_cluster_id, R_2:]
 
-        # Create subplots (1 row, 2 columns)
-        member_demand_profiles = demand_profiles[member_day_indices]  # Increased width for legend, height for better visibility
+        # Extract member data for the chosen cluster
+        member_demand_profiles = demand_profiles[member_day_indices]
         member_wind_profiles = wind_profiles[member_day_indices]
 
-        # Lists to hold handles for centroids for the combined legend
+        # Plot Demand for the current cluster
         for i_2, day_demand in enumerate(member_demand_profiles):
+            # Plot members with lighter color and higher transparency
             axes_4[0].plot(range(1, R_2 + 1), day_demand, color=cluster_color, linestyle='-', linewidth=0.8, alpha=0.4)
 
+        # Plot centroid with a darker version of the color and a distinct marker
         line_demand, = axes_4[0].plot(range(1, R_2 + 1), centroid_demand, color=cluster_color, linestyle='-', marker='o', markersize=6, linewidth=2.5, zorder=5, label=f'Centroid {current_cluster_id}')
         centroid_handles.append(line_demand)
-        centroid_labels.append(f'Centroid {current_cluster_id}')  # Find all day indices that belong to the chosen cluster
+        centroid_labels.append(f'Centroid {current_cluster_id}')
+
+        # Plot Wind Capacity Factor for the current cluster
         for i_2, day_wind in enumerate(member_wind_profiles):
+            # Plot members with lighter color and higher transparency
             axes_4[1].plot(range(1, R_2 + 1), day_wind, color=cluster_color, linestyle='-', linewidth=0.8, alpha=0.4)
 
-        line_wind, = axes_4[1].plot(range(1, R_2 + 1), centroid_wind, color=cluster_color, linestyle='-', marker='o', markersize=6, 
-                                    linewidth=2.5, zorder=5)  # Skip if no members found for this cluster
+        # Plot centroid with a darker version of the color and a distinct marker
+        line_wind, = axes_4[1].plot(range(1, R_2 + 1), centroid_wind, color=cluster_color, linestyle='-', marker='o', markersize=6, linewidth=2.5, zorder=5)  
+        # No need to add to centroid_handles for wind as one common legend will be created
 
+    # --- Common plot settings after all clusters are plotted ---
+
+    # Demand plot settings
     axes_4[0].set_title(f'Demand (MWh) (Centroids vs. Members)', fontsize=16, weight='bold')
-    axes_4[0].set_xlabel('Time (hours)', fontsize=16)  # print(f"Warning: Cluster ID {current_cluster_id} has no members. Skipping plot.") 
-
+    axes_4[0].set_xlabel('Time (hours)', fontsize=16)
     axes_4[0].set_xticks(range(2, R_2 + 1, 2))
     axes_4[0].set_xticklabels(range(2, R_2 + 1, 2))
-    axes_4[0].tick_params(axis='both', labelsize=14)  # Assign a color for the current cluster
+    axes_4[0].tick_params(axis='both', labelsize=14)  
     axes_4[0].grid(True, linestyle='--', alpha=0.7)
     axes_4[0].margins(x=0)
-    axes_4[1].set_title(f'Wind Capacity Factor (p.u.) (Centroids vs. Members)', fontsize=16, weight='bold')  # Extract centroid data for the chosen cluster
+
+    # Wind plot settings
+    axes_4[1].set_title(f'Wind Capacity Factor (p.u.) (Centroids vs. Members)', fontsize=16, weight='bold')  
     axes_4[1].set_xlabel('Time (hours)', fontsize=16)
     axes_4[1].set_xticks(range(2, R_2 + 1, 2))
     axes_4[1].set_xticklabels(range(2, R_2 + 1, 2))
-    axes_4[1].set_yticks([0, 0.2, 0.4, 0.6, 0.8, 1])  # Extract member data for the chosen cluster
+    axes_4[1].set_yticks([0, 0.2, 0.4, 0.6, 0.8, 1])  
     axes_4[1].tick_params(axis='both', labelsize=14)
     axes_4[1].grid(True, linestyle='--', alpha=0.7)
     axes_4[1].margins(x=0)
-    plt.tight_layout(rect=[0, 0, 0.9, 1])  # Plot Demand for the current cluster
-    plt.show()
 
-    # Plot members with lighter color and higher transparency  # Plot centroid with a darker version of the color and a distinct marker  # Plot Wind Capacity Factor for the current cluster  # Plot members with lighter color and higher transparency  # Plot centroid with a darker version of the color and a distinct marker  # No need to add to centroid_handles for wind as one common legend will be created  # Adjust rect to make space for the legend on the right
+    # Adjust rect to make space for the legend on the right
+    plt.tight_layout(rect=[0, 0, 0.9, 1])  
+    plt.show()
     return
 
 
@@ -959,7 +1064,7 @@ def _(OPER_COST_STOR_CH, OPER_COST_STOR_DIS, STOR_EFF_CH, STOR_EFF_DIS, pyo):
         demand_mean[k] = input_data["Demand (MWh)"].iloc[indices].mean()
         clusters_cardinalities[k] = len(indices)
 
-      last_k = unique_clusters[-1] # Define this for constraints
+      last_k = unique_clusters[-1]  # Define this for constraints
       first_k = unique_clusters[0]
 
       # Define sets
@@ -1080,14 +1185,16 @@ def _(
     time,
 ):
     aggregated_model_kmeans = create_aggregated_model(input_data, chronological_kmeans_mapping, INV_COST_WIND, INV_COST_THERMAL, OPER_COST_WIND, OPER_COST_THERMAL, OPER_COST_NSE, STOR_ETP, INV_COST_STOR)
-    solver_1 = pyo.SolverFactory('highs')
+
     # Solve pyomo model with highs
+    _solver = pyo.SolverFactory('highs')
     start = time.time()
-    res_1 = solver_1.solve(aggregated_model_kmeans)
+    res_1 = _solver.solve(aggregated_model_kmeans)
     end = time.time()
     print(f'Time taken: {end - start:.2f} seconds')
-    if res_1.solver.termination_condition == 'optimal':
+
     # Check the status of the solution
+    if res_1.solver.termination_condition == 'optimal':
         print(f'K-Means aggregated model optimal obj. fun. value = {pyo.value(aggregated_model_kmeans.obj) / 1000000.0:.2f} mln €')
     else:
         print('No optimal solution found.')
@@ -1118,14 +1225,16 @@ def _(
     time,
 ):
     aggregated_model_CH = create_aggregated_model(input_data, CH_mapping, INV_COST_WIND, INV_COST_THERMAL, OPER_COST_WIND, OPER_COST_THERMAL, OPER_COST_NSE, STOR_ETP, INV_COST_STOR)
-    solver_2 = pyo.SolverFactory('highs')
+
     # Solve pyomo model with highs
+    _solver = pyo.SolverFactory('highs')
     start_1 = time.time()
-    res_2 = solver_2.solve(aggregated_model_CH)
+    res_2 = _solver.solve(aggregated_model_CH)
     end_1 = time.time()
     print(f'Time taken: {end_1 - start_1:.2f} seconds')
-    if res_2.solver.termination_condition == 'optimal':
+
     # Check the status of the solution
+    if res_2.solver.termination_condition == 'optimal':
         print(f'Chronological hierarchical aggregated model optimal obj. fun. value = {pyo.value(aggregated_model_CH.obj) / 1000000.0:.2f} mln €')
     else:
         print('No optimal solution found.')
@@ -1211,18 +1320,17 @@ def _(OPER_COST_STOR_CH, OPER_COST_STOR_DIS, STOR_EFF_CH, STOR_EFF_DIS, pyo):
         model.R = pyo.Set(initialize=range(R))
         model.N = pyo.Set(initialize=range(total_periods))
 
-
         # Define variables
-        model.x_wind = pyo.Var(within=pyo.NonNegativeReals) # Wind installed capacity (MW)
-        model.x_thermal = pyo.Var(within=pyo.NonNegativeReals) # Thermal installed capacity (MW)
-        model.x_storage = pyo.Var(within=pyo.NonNegativeReals) # Storage installed capacity (MW)
-        model.p_th = pyo.Var(model.D, model.R, within=pyo.NonNegativeReals) # Thermal power generation (MW)
-        model.p_w = pyo.Var(model.D, model.R, within=pyo.NonNegativeReals) # Wind power generation (MW)
-        model.p_c = pyo.Var(model.D, model.R, within=pyo.NonNegativeReals) # Storage charging power (MW)
-        model.p_d = pyo.Var(model.D, model.R, within=pyo.NonNegativeReals) # Storage discharging power (MW)
-        model.e_ns = pyo.Var(model.D, model.R, within=pyo.NonNegativeReals) # Non-supplied energy demand (MWh)
-        model.delta_e_s = pyo.Var(model.D, model.R, within=pyo.Reals) # Storage intra state of charge difference (MWh)
-        model.e_s_inter = pyo.Var(model.N, within=pyo.NonNegativeReals) # Storage inter-day state of charge (MWh)
+        model.x_wind = pyo.Var(within=pyo.NonNegativeReals)  # Wind installed capacity (MW)
+        model.x_thermal = pyo.Var(within=pyo.NonNegativeReals)  # Thermal installed capacity (MW)
+        model.x_storage = pyo.Var(within=pyo.NonNegativeReals)  # Storage installed capacity (MW)
+        model.p_th = pyo.Var(model.D, model.R, within=pyo.NonNegativeReals)  # Thermal power generation (MW)
+        model.p_w = pyo.Var(model.D, model.R, within=pyo.NonNegativeReals)  # Wind power generation (MW)
+        model.p_c = pyo.Var(model.D, model.R, within=pyo.NonNegativeReals)  # Storage charging power (MW)
+        model.p_d = pyo.Var(model.D, model.R, within=pyo.NonNegativeReals)  # Storage discharging power (MW)
+        model.e_ns = pyo.Var(model.D, model.R, within=pyo.NonNegativeReals)  # Non-supplied energy demand (MWh)
+        model.delta_e_s = pyo.Var(model.D, model.R, within=pyo.Reals)  # Storage intra state of charge difference (MWh)
+        model.e_s_inter = pyo.Var(model.N, within=pyo.NonNegativeReals)  # Storage inter-day state of charge (MWh)
 
         # Define constraints
         # 1. Thermal power generation limits
@@ -1281,7 +1389,6 @@ def _(OPER_COST_STOR_CH, OPER_COST_STOR_DIS, STOR_EFF_CH, STOR_EFF_DIS, pyo):
                    mdl.e_ns[d, r] == cluster_demand[d][r]
         model.ePower_balance = pyo.Constraint(model.D, model.R, rule=rule_energy_balance)
 
-
         # 10. Objective Function
         def rule_objective(mdl):
             inv = inv_cost_wind * mdl.x_wind + inv_cost_thermal * mdl.x_thermal + inv_cost_stor * mdl.x_storage
@@ -1325,12 +1432,14 @@ def _(
     time,
 ):
     rep_model = create_rep_model(input_data, rep_mapping, 24, INV_COST_WIND, INV_COST_THERMAL, OPER_COST_WIND, OPER_COST_THERMAL, OPER_COST_NSE, STOR_ETP, INV_COST_STOR)
+
     # Solve pyomo model with highs
-    solver_3 = pyo.SolverFactory('highs')
+    _solver = pyo.SolverFactory('highs')
     start_2 = time.time()
-    res_3 = solver_3.solve(rep_model)
+    res_3 = _solver.solve(rep_model)
     end_2 = time.time()
     print(f'Time taken: {end_2 - start_2:.2f} seconds')
+
     # Check the status of the solution
     if res_3.solver.termination_condition == 'optimal':
         print(f'K-Means aggregated model optimal obj. fun. value = {pyo.value(rep_model.obj) / 1000000.0:.2f} mln €')
@@ -1389,7 +1498,7 @@ def _(
         solver = pyo.SolverFactory('highs')
         res = solver.solve(aggregated_model)
 
-      return ( pyo.value(full_model.obj) - pyo.value(aggregated_model.obj))/pyo.value(full_model.obj)*100
+      return (pyo.value(full_model.obj) - pyo.value(aggregated_model.obj)) / pyo.value(full_model.obj) * 100
 
     def plot_investments_results(mapping,full_model,aggregated_model = None):
       if aggregated_model is None:
@@ -1442,7 +1551,6 @@ def _(
       ax.set_xticklabels(labels, fontsize=16)
       ax.tick_params(axis='both', labelsize=16)
 
-
       ax.legend(fontsize=16, frameon=True, loc='upper left')
 
       ax.yaxis.grid(True, linestyle='--', alpha=0.7)
@@ -1451,11 +1559,10 @@ def _(
       plt.tight_layout()
       plt.show()
 
-
     def length(mapping):
       temp = len(mapping)
       if temp == 364:
-        return len(set(mapping.values()))*24
+        return len(set(mapping.values())) * 24
       else:
         return len(set(mapping.values()))
     return evaluate_mapping, length, plot_investments_results
@@ -1566,26 +1673,21 @@ def _(mo):
 
 
 @app.cell
-def _(input_data, lagged_kmeans_clustering):
-    # Here implement your mapping solution
-    _labels, _centroids, my_mapping = lagged_kmeans_clustering(input_data, K=500)
-    return (my_mapping,)
-
-
-@app.cell
 def _(
     evaluate_mapping,
     full_model,
     length,
+    mo,
     my_mapping,
     plot_investments_results,
 ):
     # Evaluate your mapping
     size = length(my_mapping)
-    if size>500:
+    if size > 500:
       print("You exceeded 500 timesteps!")
       print(f"Size of aggregated model: {size}")
       print(f"Relative output error of the aggregated model: {evaluate_mapping(my_mapping,full_model):.2f} %")
+      mo.stop()
     else:
       print(f"Size of aggregated model: {size}")
       print(f"Relative output error of the aggregated model: {evaluate_mapping(my_mapping,full_model):.2f} %")
