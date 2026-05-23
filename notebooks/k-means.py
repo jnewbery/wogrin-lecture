@@ -516,7 +516,6 @@ def _(
         aggregated_colors.append(cluster_colors[original_kmeans_cluster_id % len(cluster_colors)])
 
     # 5. Plotting
-    #_fig, _axes = plt.subplots(2, 1, figsize=(19, 4))
     _fig, _axes = plt.subplots(2, 1, figsize=(20, 12))
     # Plot Demand
     _axes[0].plot(range(1, R + 1), original_demand_profile, color='gray', linestyle='--', linewidth=1.5, alpha=0.7, label='Original Profile')
@@ -570,19 +569,30 @@ def _(mo):
 
 
 @app.cell
-def _(input_data, rep_clustering):
-    K_rep = 30 # Number of desired representative days
+def _(mo):
+    representative_days_clusters = mo.ui.slider(
+        start=1, stop=30, value=5, step=1,
+        label="Number of representative days",
+        show_value=True,
+    )
+    representative_days_clusters
+    return (representative_days_clusters,)
+
+
+@app.cell
+def _(input_data, rep_clustering, representative_days_clusters):
+    K_rep = representative_days_clusters.value # Number of desired representative days
 
     rep_labels_shifted, rep_centroids_shifted, rep_mapping_shifted = rep_clustering(input_data, K_rep)
     rep_mapping = {i: int(rep_mapping_shifted[old_key]) for i, old_key in enumerate(sorted(rep_mapping_shifted.keys()))}
 
     # Display mapping
     print(rep_mapping)
-    return rep_centroids_shifted, rep_labels_shifted
+    return K_rep, rep_centroids_shifted, rep_labels_shifted
 
 
 @app.cell
-def _(input_data, plt, rep_centroids_shifted, rep_labels_shifted):
+def _(K_rep, input_data, plt, rep_centroids_shifted, rep_labels_shifted):
     _R = 24  # Number of hours in a representative period (a day)
 
     # Reshape input data into daily profiles
@@ -590,16 +600,16 @@ def _(input_data, plt, rep_centroids_shifted, rep_labels_shifted):
     wind_profiles = input_data['Wind Capacity Factor (p.u.)'].values.reshape(-1, _R)
 
     # Get all unique cluster IDs
-    unique_cluster_ids = [5, 12, 15]
+    unique_cluster_ids = list(range(_R))
 
     # Choose a colormap for distinct colors for each cluster
-    num_clusters = len(unique_cluster_ids)
+    num_clusters = K_rep
     # Use a colormap suitable for categorical data, e.g., 'tab20' if num_clusters <= 20
     # If more, use 'rainbow' or a custom cycle
     cmap_1 = plt.colormaps.get_cmap('viridis').resampled(num_clusters) if num_clusters <= 20 else plt.colormaps.get_cmap('rainbow').resampled(num_clusters)
 
     # Create subplots (1 row, 2 columns)
-    _, _axes = plt.subplots(1, 2, figsize=(19, 4))  # Increased width for legend, height for better visibility
+    _, _axes = plt.subplots(2, 1, figsize=(20, 12))
 
     # Lists to hold handles for centroids for the combined legend
     centroid_handles = []
@@ -666,7 +676,7 @@ def _(input_data, plt, rep_centroids_shifted, rep_labels_shifted):
 
     # Adjust rect to make space for the legend on the right
     plt.tight_layout(rect=[0, 0, 0.9, 1])  
-    plt.show()
+    plt.gca()
     return
 
 
