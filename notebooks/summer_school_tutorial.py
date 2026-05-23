@@ -246,27 +246,27 @@ def _(input_data, np, pd, plt):
     flierprops_blue = dict(marker='o', markerfacecolor='blue', markersize=6, linestyle='none', alpha=0.6)
 
     # Create subplots (1 row, 2 columns)
-    fig_1, axes_1 = plt.subplots(1, 2, figsize=(19, 4))
+    _, _axes = plt.subplots(1, 2, figsize=(19, 4))
 
     # Demand Boxplot
-    dem_bp = dem_daily.boxplot(ax=axes_1[0], boxprops=boxprops_red, medianprops=medianprops_red, whiskerprops=whiskerprops_red, capprops=capprops_red, flierprops=flierprops_red, return_type='dict', patch_artist=True)
-    axes_1[0].set_title('Demand (MWh) Daily Distribution', fontsize=16, weight='bold')
-    axes_1[0].set_xlabel('Time (hours)', fontsize=16)
-    axes_1[0].tick_params(axis='both', labelsize=16)
-    axes_1[0].grid(True, linestyle='--', alpha=0.7)
-    axes_1[0].margins(x=0)
+    dem_bp = dem_daily.boxplot(ax=_axes[0], boxprops=boxprops_red, medianprops=medianprops_red, whiskerprops=whiskerprops_red, capprops=capprops_red, flierprops=flierprops_red, return_type='dict', patch_artist=True)
+    _axes[0].set_title('Demand (MWh) Daily Distribution', fontsize=16, weight='bold')
+    _axes[0].set_xlabel('Time (hours)', fontsize=16)
+    _axes[0].tick_params(axis='both', labelsize=16)
+    _axes[0].grid(True, linestyle='--', alpha=0.7)
+    _axes[0].margins(x=0)
     for patch in dem_bp['boxes']:
         patch.set_facecolor('r')
         patch.set_alpha(0.3)
 
     # Capacity Factor Boxplot
-    cf_bp = cf_daily.boxplot(ax=axes_1[1], boxprops=boxprops_blue, medianprops=medianprops_blue, whiskerprops=whiskerprops_blue, capprops=capprops_blue, flierprops=flierprops_blue, return_type='dict', patch_artist=True)
-    axes_1[1].set_title('Wind Capacity Factor (p.u.) Daily Distribution', fontsize=16, weight='bold')
-    axes_1[1].set_xlabel('Time (hours)', fontsize=16)
-    axes_1[1].tick_params(axis='both', labelsize=16)  # Added return_type='dict' and patch_artist=True
-    axes_1[1].grid(True, linestyle='--', alpha=0.7)
-    axes_1[1].margins(x=0)
-    axes_1[1].set_yticks(np.arange(0, 1.1, 0.2))
+    cf_bp = cf_daily.boxplot(ax=_axes[1], boxprops=boxprops_blue, medianprops=medianprops_blue, whiskerprops=whiskerprops_blue, capprops=capprops_blue, flierprops=flierprops_blue, return_type='dict', patch_artist=True)
+    _axes[1].set_title('Wind Capacity Factor (p.u.) Daily Distribution', fontsize=16, weight='bold')
+    _axes[1].set_xlabel('Time (hours)', fontsize=16)
+    _axes[1].tick_params(axis='both', labelsize=16)  # Added return_type='dict' and patch_artist=True
+    _axes[1].grid(True, linestyle='--', alpha=0.7)
+    _axes[1].margins(x=0)
+    _axes[1].set_yticks(np.arange(0, 1.1, 0.2))
     for patch in cf_bp['boxes']:
         patch.set_facecolor('b')
         patch.set_alpha(0.3)
@@ -800,7 +800,6 @@ def _(CH_mapping, P, input_data, np, plt):
             aggregated_wind_means_ch[k_ch] = 0.0  # Fallback
 
     # 2. Select an exemplary 24-hour period (e.g., a random day)
-    random_day = P  # Ensures we pick a full day
     exemplary_start_idx_1 = P * R_1
     exemplary_hours_1 = range(exemplary_start_idx_1, exemplary_start_idx_1 + R_1)
 
@@ -814,11 +813,11 @@ def _(CH_mapping, P, input_data, np, plt):
     aggregated_colors_ch = []
     unique_clusters_in_day_ch = set()
 
-    for i_1, t_1 in enumerate(exemplary_hours_1):
-        ch_cluster_id = CH_mapping[t_1]
-        aggregated_demand_profile_ch[i_1] = aggregated_demand_means_ch[ch_cluster_id]
+    for _i, _t in enumerate(exemplary_hours_1):
+        ch_cluster_id = CH_mapping[_t]
+        aggregated_demand_profile_ch[_i] = aggregated_demand_means_ch[ch_cluster_id]
 
-        aggregated_wind_profile_ch[i_1] = aggregated_wind_means_ch[ch_cluster_id]
+        aggregated_wind_profile_ch[_i] = aggregated_wind_means_ch[ch_cluster_id]
         unique_clusters_in_day_ch.add(ch_cluster_id)
         aggregated_colors_ch.append(ch_cluster_id)  # Store the cluster ID for coloring
 
@@ -836,47 +835,47 @@ def _(CH_mapping, P, input_data, np, plt):
         color_map_func = lambda cluster_id: basic_colors[list(unique_clusters_in_day_ch).index(cluster_id) % len(basic_colors)]  
     else:
         # Handle case with no clusters in the exemplary day (should not happen for R=24 usually)
-        color_map_func = lambda cluster_id: 'black'  # Default color if no clusters
+        color_map_func = lambda _: 'black'  # Default color if no clusters
 
     final_aggregated_colors_ch = [color_map_func(cid) for cid in aggregated_colors_ch]
 
     # 5. Plotting
-    fig_3, axes_3 = plt.subplots(1, 2, figsize=(19, 4))
+    _, _axes = plt.subplots(1, 2, figsize=(19, 4))
 
     # Plot Demand
-    axes_3[0].plot(range(1, R_1 + 1), original_demand_profile_ch, color='gray', linestyle='--', linewidth=1.5, alpha=0.7, label='Original Profile')
-    axes_3[0].plot(range(1, R_1 + 1), aggregated_demand_profile_ch, color='black', linestyle='-', linewidth=2, zorder=4)  # Line connecting aggregated points
-    scatter_demand_ch = axes_3[0].scatter(range(1, R_1 + 1), aggregated_demand_profile_ch, c=final_aggregated_colors_ch, s=70, marker='o', edgecolor='black', zorder=5)
-    axes_3[0].set_title(f'Demand (MWh)', fontsize=16, weight='bold')
-    axes_3[0].set_xlabel('Time (hours)', fontsize=16)
-    axes_3[0].set_xticks(range(1, R_1 + 1, R_1 // 24))
-    axes_3[0].tick_params(axis='both', labelsize=14)
-    axes_3[0].grid(True, linestyle='--', alpha=0.7)
-    axes_3[0].margins(x=0)
+    _axes[0].plot(range(1, R_1 + 1), original_demand_profile_ch, color='gray', linestyle='--', linewidth=1.5, alpha=0.7, label='Original Profile')
+    _axes[0].plot(range(1, R_1 + 1), aggregated_demand_profile_ch, color='black', linestyle='-', linewidth=2, zorder=4)  # Line connecting aggregated points
+    scatter_demand_ch = _axes[0].scatter(range(1, R_1 + 1), aggregated_demand_profile_ch, c=final_aggregated_colors_ch, s=70, marker='o', edgecolor='black', zorder=5)
+    _axes[0].set_title(f'Demand (MWh)', fontsize=16, weight='bold')
+    _axes[0].set_xlabel('Time (hours)', fontsize=16)
+    _axes[0].set_xticks(range(1, R_1 + 1, R_1 // 24))
+    _axes[0].tick_params(axis='both', labelsize=14)
+    _axes[0].grid(True, linestyle='--', alpha=0.7)
+    _axes[0].margins(x=0)
 
     # Create custom legend for clarity (similar to K-Means plot)
     legend_lines_handles_ch = [plt.Line2D([0], [0], color='gray', linestyle='--', linewidth=1.5, label='Original Profile'), plt.Line2D([0], [0], color='black', linestyle='-', marker='o', markerfacecolor='black', markeredgecolor='black', markersize=7, label='Aggregated Profile')]  
-    first_legend_ch = axes_3[0].legend(handles=legend_lines_handles_ch, fontsize=12)
-    axes_3[0].add_artist(first_legend_ch)
+    first_legend_ch = _axes[0].legend(handles=legend_lines_handles_ch, fontsize=12)
+    _axes[0].add_artist(first_legend_ch)
     legend_elements_colors_ch = []
 
     for cid in sorted(list(unique_clusters_in_day_ch)):
         legend_elements_colors_ch.append(plt.Line2D([0], [0], marker='o', color='w', label=f'{cid}', markerfacecolor=color_map_func(cid), markersize=10))
 
     # Plot Wind Capacity Factor
-    axes_3[1].plot(range(1, R_1 + 1), original_wind_profile_ch, color='gray', linestyle='--', linewidth=1.5, alpha=0.7, label='Original Profile')
-    axes_3[1].plot(range(1, R_1 + 1), aggregated_wind_profile_ch, color='black', linestyle='-', linewidth=2, zorder=4)
-    scatter_wind_ch = axes_3[1].scatter(range(1, R_1 + 1), aggregated_wind_profile_ch, c=final_aggregated_colors_ch, s=70, marker='o', edgecolor='black', zorder=5)
-    axes_3[1].set_title(f'Wind Capacity Factor (p.u.)', fontsize=16, weight='bold')
-    axes_3[1].set_xlabel('Time (hours)', fontsize=16)
-    axes_3[1].set_xticks(range(1, R_1 + 1, R_1 // 24))
-    axes_3[1].set_xticklabels(range(1, R_1 + 1, R_1 // 24))
-    axes_3[1].set_yticks(np.arange(0, 1.1, 0.2))
-    axes_3[1].tick_params(axis='both', labelsize=12)
-    axes_3[1].grid(True, linestyle='--', alpha=0.7)
-    axes_3[1].margins(x=0)
-    second_legend_ch = axes_3[1].legend(handles=legend_lines_handles_ch, fontsize=12)
-    axes_3[1].add_artist(second_legend_ch)
+    _axes[1].plot(range(1, R_1 + 1), original_wind_profile_ch, color='gray', linestyle='--', linewidth=1.5, alpha=0.7, label='Original Profile')
+    _axes[1].plot(range(1, R_1 + 1), aggregated_wind_profile_ch, color='black', linestyle='-', linewidth=2, zorder=4)
+    scatter_wind_ch = _axes[1].scatter(range(1, R_1 + 1), aggregated_wind_profile_ch, c=final_aggregated_colors_ch, s=70, marker='o', edgecolor='black', zorder=5)
+    _axes[1].set_title(f'Wind Capacity Factor (p.u.)', fontsize=16, weight='bold')
+    _axes[1].set_xlabel('Time (hours)', fontsize=16)
+    _axes[1].set_xticks(range(1, R_1 + 1, R_1 // 24))
+    _axes[1].set_xticklabels(range(1, R_1 + 1, R_1 // 24))
+    _axes[1].set_yticks(np.arange(0, 1.1, 0.2))
+    _axes[1].tick_params(axis='both', labelsize=12)
+    _axes[1].grid(True, linestyle='--', alpha=0.7)
+    _axes[1].margins(x=0)
+    second_legend_ch = _axes[1].legend(handles=legend_lines_handles_ch, fontsize=12)
+    _axes[1].add_artist(second_legend_ch)
 
     # Display plot
     plt.tight_layout()
@@ -922,7 +921,7 @@ def _(input_data, plt, rep_centroids_shifted, rep_labels_shifted):
     cmap_1 = plt.colormaps.get_cmap('viridis').resampled(num_clusters) if num_clusters <= 20 else plt.colormaps.get_cmap('rainbow').resampled(num_clusters)
 
     # Create subplots (1 row, 2 columns)
-    fig_4, axes_4 = plt.subplots(1, 2, figsize=(19, 4))  # Increased width for legend, height for better visibility
+    _, _axes = plt.subplots(1, 2, figsize=(19, 4))  # Increased width for legend, height for better visibility
 
     # Lists to hold handles for centroids for the combined legend
     centroid_handles = []
@@ -949,44 +948,44 @@ def _(input_data, plt, rep_centroids_shifted, rep_labels_shifted):
         member_wind_profiles = wind_profiles[member_day_indices]
 
         # Plot Demand for the current cluster
-        for i_2, day_demand in enumerate(member_demand_profiles):
+        for day_demand in member_demand_profiles:
             # Plot members with lighter color and higher transparency
-            axes_4[0].plot(range(1, R_2 + 1), day_demand, color=cluster_color, linestyle='-', linewidth=0.8, alpha=0.4)
+            _axes[0].plot(range(1, R_2 + 1), day_demand, color=cluster_color, linestyle='-', linewidth=0.8, alpha=0.4)
 
         # Plot centroid with a darker version of the color and a distinct marker
-        line_demand, = axes_4[0].plot(range(1, R_2 + 1), centroid_demand, color=cluster_color, linestyle='-', marker='o', markersize=6, linewidth=2.5, zorder=5, label=f'Centroid {current_cluster_id}')
+        line_demand, = _axes[0].plot(range(1, R_2 + 1), centroid_demand, color=cluster_color, linestyle='-', marker='o', markersize=6, linewidth=2.5, zorder=5, label=f'Centroid {current_cluster_id}')
         centroid_handles.append(line_demand)
         centroid_labels.append(f'Centroid {current_cluster_id}')
 
         # Plot Wind Capacity Factor for the current cluster
-        for i_2, day_wind in enumerate(member_wind_profiles):
+        for day_wind in member_wind_profiles:
             # Plot members with lighter color and higher transparency
-            axes_4[1].plot(range(1, R_2 + 1), day_wind, color=cluster_color, linestyle='-', linewidth=0.8, alpha=0.4)
+            _axes[1].plot(range(1, R_2 + 1), day_wind, color=cluster_color, linestyle='-', linewidth=0.8, alpha=0.4)
 
         # Plot centroid with a darker version of the color and a distinct marker
-        line_wind, = axes_4[1].plot(range(1, R_2 + 1), centroid_wind, color=cluster_color, linestyle='-', marker='o', markersize=6, linewidth=2.5, zorder=5)  
+        line_wind, = _axes[1].plot(range(1, R_2 + 1), centroid_wind, color=cluster_color, linestyle='-', marker='o', markersize=6, linewidth=2.5, zorder=5)  
         # No need to add to centroid_handles for wind as one common legend will be created
 
     # --- Common plot settings after all clusters are plotted ---
 
     # Demand plot settings
-    axes_4[0].set_title(f'Demand (MWh) (Centroids vs. Members)', fontsize=16, weight='bold')
-    axes_4[0].set_xlabel('Time (hours)', fontsize=16)
-    axes_4[0].set_xticks(range(2, R_2 + 1, 2))
-    axes_4[0].set_xticklabels(range(2, R_2 + 1, 2))
-    axes_4[0].tick_params(axis='both', labelsize=14)  
-    axes_4[0].grid(True, linestyle='--', alpha=0.7)
-    axes_4[0].margins(x=0)
+    _axes[0].set_title(f'Demand (MWh) (Centroids vs. Members)', fontsize=16, weight='bold')
+    _axes[0].set_xlabel('Time (hours)', fontsize=16)
+    _axes[0].set_xticks(range(2, R_2 + 1, 2))
+    _axes[0].set_xticklabels(range(2, R_2 + 1, 2))
+    _axes[0].tick_params(axis='both', labelsize=14)  
+    _axes[0].grid(True, linestyle='--', alpha=0.7)
+    _axes[0].margins(x=0)
 
     # Wind plot settings
-    axes_4[1].set_title(f'Wind Capacity Factor (p.u.) (Centroids vs. Members)', fontsize=16, weight='bold')  
-    axes_4[1].set_xlabel('Time (hours)', fontsize=16)
-    axes_4[1].set_xticks(range(2, R_2 + 1, 2))
-    axes_4[1].set_xticklabels(range(2, R_2 + 1, 2))
-    axes_4[1].set_yticks([0, 0.2, 0.4, 0.6, 0.8, 1])  
-    axes_4[1].tick_params(axis='both', labelsize=14)
-    axes_4[1].grid(True, linestyle='--', alpha=0.7)
-    axes_4[1].margins(x=0)
+    _axes[1].set_title(f'Wind Capacity Factor (p.u.) (Centroids vs. Members)', fontsize=16, weight='bold')  
+    _axes[1].set_xlabel('Time (hours)', fontsize=16)
+    _axes[1].set_xticks(range(2, R_2 + 1, 2))
+    _axes[1].set_xticklabels(range(2, R_2 + 1, 2))
+    _axes[1].set_yticks([0, 0.2, 0.4, 0.6, 0.8, 1])  
+    _axes[1].tick_params(axis='both', labelsize=14)
+    _axes[1].grid(True, linestyle='--', alpha=0.7)
+    _axes[1].margins(x=0)
 
     # Adjust rect to make space for the legend on the right
     plt.tight_layout(rect=[0, 0, 0.9, 1])  
@@ -1188,13 +1187,13 @@ def _(
 
     # Solve pyomo model with highs
     _solver = pyo.SolverFactory('highs')
-    start = time.time()
-    res_1 = _solver.solve(aggregated_model_kmeans)
-    end = time.time()
-    print(f'Time taken: {end - start:.2f} seconds')
+    _start = time.time()
+    _res = _solver.solve(aggregated_model_kmeans)
+    _end = time.time()
+    print(f'Time taken: {_end - _start:.2f} seconds')
 
     # Check the status of the solution
-    if res_1.solver.termination_condition == 'optimal':
+    if _res.solver.termination_condition == 'optimal':
         print(f'K-Means aggregated model optimal obj. fun. value = {pyo.value(aggregated_model_kmeans.obj) / 1000000.0:.2f} mln €')
     else:
         print('No optimal solution found.')
@@ -1228,13 +1227,13 @@ def _(
 
     # Solve pyomo model with highs
     _solver = pyo.SolverFactory('highs')
-    start_1 = time.time()
-    res_2 = _solver.solve(aggregated_model_CH)
-    end_1 = time.time()
-    print(f'Time taken: {end_1 - start_1:.2f} seconds')
+    _start = time.time()
+    _res = _solver.solve(aggregated_model_CH)
+    _end = time.time()
+    print(f'Time taken: {_end - _start:.2f} seconds')
 
     # Check the status of the solution
-    if res_2.solver.termination_condition == 'optimal':
+    if _res.solver.termination_condition == 'optimal':
         print(f'Chronological hierarchical aggregated model optimal obj. fun. value = {pyo.value(aggregated_model_CH.obj) / 1000000.0:.2f} mln €')
     else:
         print('No optimal solution found.')
@@ -1435,13 +1434,13 @@ def _(
 
     # Solve pyomo model with highs
     _solver = pyo.SolverFactory('highs')
-    start_2 = time.time()
-    res_3 = _solver.solve(rep_model)
-    end_2 = time.time()
-    print(f'Time taken: {end_2 - start_2:.2f} seconds')
+    _start = time.time()
+    _res = _solver.solve(rep_model)
+    _end = time.time()
+    print(f'Time taken: {_end - _start:.2f} seconds')
 
     # Check the status of the solution
-    if res_3.solver.termination_condition == 'optimal':
+    if _res.solver.termination_condition == 'optimal':
         print(f'K-Means aggregated model optimal obj. fun. value = {pyo.value(rep_model.obj) / 1000000.0:.2f} mln €')
     else:
         print('No optimal solution found.')
