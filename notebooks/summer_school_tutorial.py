@@ -188,8 +188,10 @@ def _(mo):
     mo.md(r"""
     ## 2.3. Graphical representation of the input data
 
-    *   First, we plot the distributions of demand and wind capacity factors.
-    *   Next, we plot the demand and wind capacity factors for random days within the simulation period.
+    Display the input data in two ways:
+
+    *   Distributions of demand and wind capacity factors (frequency across all hours in the data set)
+    *   Distribution of demand and wind capacity factors for each hour-of-day
     """)
     return
 
@@ -473,14 +475,7 @@ def _(mo):
 
 
 @app.cell
-def _(KMeans, MinMaxScaler, copy, input_data, np, pd):
-    def chronlogical_kmeans_clustering(df, K):
-        """Chronological K-means clustering"""
-        kmeans_labels_shifted, kmeans_centroids_shifted, kmeans_mapping_shifted = kmeans_clustering(input_data, K)
-        kmeans_mapping = {i: int(kmeans_mapping_shifted[old_key]) for i, old_key in enumerate(sorted(kmeans_mapping_shifted.keys()))}
-        chronological_kmeans_mapping = chronologize(kmeans_mapping)
-        return chronological_kmeans_mapping
-
+def _(KMeans, MinMaxScaler, copy, np, pd):
     def kmeans_clustering(df, K):
         """Traditional K-means clustering"""
         # Extract the relevant features from df: Wind Capacity Factors and Demand
@@ -508,21 +503,19 @@ def _(KMeans, MinMaxScaler, copy, input_data, np, pd):
         for i in range(len(mapping)):
             if i == 0 or mapping[i] != mapping[i - 1]:
                 it = it + 1
-                n_mapping[i] = it
-            else:
-                n_mapping[i] = it
+            n_mapping[i] = it
         return n_mapping
 
     def CH_clustering(df, K):
         """Chronological hierarchical clustering"""
         # Number of initial steps (hours)
         T = len(df)
-    
+
         # Extract features for scaling
         features = df[['Demand (MWh)', 'Wind Capacity Factor (p.u.)']]
         scaler = MinMaxScaler()
         scaled_features_df = pd.DataFrame(scaler.fit_transform(features), columns=features.columns, index=df.index)
-    
+
         # Initially, every hour is its own cluster
         # clusters[i] stores the list of original indices (t)
         clusters = [[i] for i in range(T)]
@@ -531,18 +524,18 @@ def _(KMeans, MinMaxScaler, copy, input_data, np, pd):
             # Cluster sizes
             n1 = len(clusters[idx1])
             n2 = len(clusters[idx2])
-        
+
             # Cluster means (centroids) using scaled features
             mean1 = scaled_features_df.iloc[clusters[idx1]].mean()
             mean2 = scaled_features_df.iloc[clusters[idx2]].mean()
-        
+
             # Ward linkage formula: (n1*n2)/(n1+n2) * squared_euclidean_dist
             squared_dist = np.sum((mean1 - mean2) ** 2)
             return n1 * n2 / (n1 + n2) * squared_dist
 
         # Calculate initial distances between all adjacent clusters
         dists = [calc_ward_dist(i, i + 1) for i in range(T - 1)]
-    
+
         # Merge until we reach K clusters
         while len(clusters) > K:
             # 1. Find the pair of adjacent clusters with the minimum Ward distance
@@ -572,22 +565,22 @@ def _(KMeans, MinMaxScaler, copy, input_data, np, pd):
 
         return mapping_dict
 
-    def rep_clustering(inpud_data, K):
-        cf = inpud_data['Wind Capacity Factor (p.u.)'].values.reshape(364, 24)
-        demand = inpud_data['Demand (MWh)'].values.reshape(364, 24)
+    def rep_clustering(input_data, K):
+        cf = input_data['Wind Capacity Factor (p.u.)'].values.reshape(364, 24)
+        demand = input_data['Demand (MWh)'].values.reshape(364, 24)
         X = np.concatenate([demand, cf], axis=1)
 
         # Initialize and fit scaler
         scaler = MinMaxScaler()
         scaled_X = scaler.fit_transform(X)
-    
+
         km = KMeans(n_clusters=K, random_state=42)
         km.fit(scaled_X)
 
         # Inverse transform centroids to original scale
         original_scale_centroids = scaler.inverse_transform(km.cluster_centers_)
-    
-        return (km.labels_, original_scale_centroids, {index: label for index, label in zip(inpud_data['Time Step Index (-)'], km.labels_)})
+
+        return (km.labels_, original_scale_centroids, {index: label for index, label in zip(input_data['Time Step Index (-)'], km.labels_)})
     return CH_clustering, chronologize, kmeans_clustering, rep_clustering
 
 
@@ -681,7 +674,7 @@ def _(
     for k_chrono in unique_chrono_clusters:
         # Get original time indices that map to this chronologized cluster
         original_indices_in_chrono_cluster = [t for t, cluster_id in chronological_kmeans_mapping.items() if cluster_id == k_chrono]
-    
+
         if original_indices_in_chrono_cluster:
             aggregated_demand_means[k_chrono] = input_data['Demand (MWh)'].iloc[original_indices_in_chrono_cluster].mean()
             aggregated_wind_means[k_chrono] = input_data['Wind Capacity Factor (p.u.)'].iloc[original_indices_in_chrono_cluster].mean()
@@ -905,11 +898,11 @@ def _(input_data, rep_clustering):
 
 @app.cell
 def _(input_data, plt, rep_centroids_shifted, rep_labels_shifted):
-    R_2 = 24  # Number of hours in a representative period (a day)
+    _R = 24  # Number of hours in a representative period (a day)
 
     # Reshape input data into daily profiles
-    demand_profiles = input_data['Demand (MWh)'].values.reshape(-1, R_2)
-    wind_profiles = input_data['Wind Capacity Factor (p.u.)'].values.reshape(-1, R_2)
+    demand_profiles = input_data['Demand (MWh)'].values.reshape(-1, _R)
+    wind_profiles = input_data['Wind Capacity Factor (p.u.)'].values.reshape(-1, _R)
 
     # Get all unique cluster IDs
     unique_cluster_ids = [5, 12, 15]
@@ -927,7 +920,6 @@ def _(input_data, plt, rep_centroids_shifted, rep_labels_shifted):
     centroid_handles = []
     centroid_labels = []
 
-
     for idx, current_cluster_id in enumerate(unique_cluster_ids):
         # Find all day indices that belong to the chosen cluster
         member_day_indices = [i for i, label in enumerate(rep_labels_shifted) if label == current_cluster_id]
@@ -940,8 +932,8 @@ def _(input_data, plt, rep_centroids_shifted, rep_labels_shifted):
         cluster_color = cmap_1(idx)
 
         # Extract centroid data for the chosen cluster
-        centroid_demand = rep_centroids_shifted[current_cluster_id, :R_2]
-        centroid_wind = rep_centroids_shifted[current_cluster_id, R_2:]
+        centroid_demand = rep_centroids_shifted[current_cluster_id, :_R]
+        centroid_wind = rep_centroids_shifted[current_cluster_id, _R:]
 
         # Extract member data for the chosen cluster
         member_demand_profiles = demand_profiles[member_day_indices]
@@ -950,20 +942,20 @@ def _(input_data, plt, rep_centroids_shifted, rep_labels_shifted):
         # Plot Demand for the current cluster
         for day_demand in member_demand_profiles:
             # Plot members with lighter color and higher transparency
-            _axes[0].plot(range(1, R_2 + 1), day_demand, color=cluster_color, linestyle='-', linewidth=0.8, alpha=0.4)
+            _axes[0].plot(range(1, _R + 1), day_demand, color=cluster_color, linestyle='-', linewidth=0.8, alpha=0.4)
 
         # Plot centroid with a darker version of the color and a distinct marker
-        line_demand, = _axes[0].plot(range(1, R_2 + 1), centroid_demand, color=cluster_color, linestyle='-', marker='o', markersize=6, linewidth=2.5, zorder=5, label=f'Centroid {current_cluster_id}')
+        line_demand, = _axes[0].plot(range(1, _R + 1), centroid_demand, color=cluster_color, linestyle='-', marker='o', markersize=6, linewidth=2.5, zorder=5, label=f'Centroid {current_cluster_id}')
         centroid_handles.append(line_demand)
         centroid_labels.append(f'Centroid {current_cluster_id}')
 
         # Plot Wind Capacity Factor for the current cluster
         for day_wind in member_wind_profiles:
             # Plot members with lighter color and higher transparency
-            _axes[1].plot(range(1, R_2 + 1), day_wind, color=cluster_color, linestyle='-', linewidth=0.8, alpha=0.4)
+            _axes[1].plot(range(1, _R + 1), day_wind, color=cluster_color, linestyle='-', linewidth=0.8, alpha=0.4)
 
         # Plot centroid with a darker version of the color and a distinct marker
-        line_wind, = _axes[1].plot(range(1, R_2 + 1), centroid_wind, color=cluster_color, linestyle='-', marker='o', markersize=6, linewidth=2.5, zorder=5)  
+        line_wind, = _axes[1].plot(range(1, _R + 1), centroid_wind, color=cluster_color, linestyle='-', marker='o', markersize=6, linewidth=2.5, zorder=5)  
         # No need to add to centroid_handles for wind as one common legend will be created
 
     # --- Common plot settings after all clusters are plotted ---
@@ -971,8 +963,8 @@ def _(input_data, plt, rep_centroids_shifted, rep_labels_shifted):
     # Demand plot settings
     _axes[0].set_title(f'Demand (MWh) (Centroids vs. Members)', fontsize=16, weight='bold')
     _axes[0].set_xlabel('Time (hours)', fontsize=16)
-    _axes[0].set_xticks(range(2, R_2 + 1, 2))
-    _axes[0].set_xticklabels(range(2, R_2 + 1, 2))
+    _axes[0].set_xticks(range(2, _R + 1, 2))
+    _axes[0].set_xticklabels(range(2, _R + 1, 2))
     _axes[0].tick_params(axis='both', labelsize=14)  
     _axes[0].grid(True, linestyle='--', alpha=0.7)
     _axes[0].margins(x=0)
@@ -980,8 +972,8 @@ def _(input_data, plt, rep_centroids_shifted, rep_labels_shifted):
     # Wind plot settings
     _axes[1].set_title(f'Wind Capacity Factor (p.u.) (Centroids vs. Members)', fontsize=16, weight='bold')  
     _axes[1].set_xlabel('Time (hours)', fontsize=16)
-    _axes[1].set_xticks(range(2, R_2 + 1, 2))
-    _axes[1].set_xticklabels(range(2, R_2 + 1, 2))
+    _axes[1].set_xticks(range(2, _R + 1, 2))
+    _axes[1].set_xticklabels(range(2, _R + 1, 2))
     _axes[1].set_yticks([0, 0.2, 0.4, 0.6, 0.8, 1])  
     _axes[1].tick_params(axis='both', labelsize=14)
     _axes[1].grid(True, linestyle='--', alpha=0.7)
