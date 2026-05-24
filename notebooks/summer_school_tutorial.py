@@ -4,13 +4,14 @@
 
 import marimo
 
-__generated_with = "0.19.6"
+__generated_with = "0.23.8"
 app = marimo.App(width="medium")
 
 
 @app.cell
 def _():
     import marimo as mo
+
     return (mo,)
 
 
@@ -70,6 +71,7 @@ def _():
     import pyomo.environ as pyo
     from sklearn.cluster import KMeans
     from sklearn.preprocessing import MinMaxScaler
+
     return (
         KMeans,
         MinMaxScaler,
@@ -581,6 +583,7 @@ def _(KMeans, MinMaxScaler, copy, np, pd):
         original_scale_centroids = scaler.inverse_transform(km.cluster_centers_)
 
         return (km.labels_, original_scale_centroids, {index: label for index, label in zip(input_data['Time Step Index (-)'], km.labels_)})
+
     return CH_clustering, chronologize, kmeans_clustering, rep_clustering
 
 
@@ -1149,6 +1152,7 @@ def _(OPER_COST_STOR_CH, OPER_COST_STOR_DIS, STOR_EFF_CH, STOR_EFF_DIS, pyo):
       model.obj = pyo.Objective(rule=obj_rule, sense=pyo.minimize)
 
       return model
+
     return (create_aggregated_model,)
 
 
@@ -1249,13 +1253,10 @@ def _(mo):
 
     As the mapping is connecting non-consecutive days, the storage model needs to incorporate the storage state of charge dynamics within (intra) and between (inter) representative days. Intra-day dynamics are described with $\delta\bar{e}^\mathrm{s}_{d,r}$, which represents the difference in state of charge at time step $r$ relative to the beginning of representative day $d$. Inter-day dynamics are modeled with $\bar{e}^{\mathrm{s}}_n$ which represents the chronological state of charge across representative days.
 
-
     <div align="center">
-      <img src="https://drive.google.com/uc?export=view&id=1FsYrAZa8Up_6ioV9LCTY7EXUXRxiji0X" width="500">
-      <br>
+      <img src="public/representative_day.png" width="500">
       <i>Figure: Schematic diagram of the representative-day aggregated model. </i>
     </div>
-
 
     As before, the goal of the aggregated optimization model is to determine the optimal values of the (aggregated) decision variables $\left\{\bar{x}^\mathrm{w}, \bar{x}^\mathrm{th}, \bar{x}^\mathrm{s},\bar{p}^\mathrm{w}_{d,r}, \bar{p}^\mathrm{th}_{d,r},\bar{p}^\mathrm{d}_{d,r},\bar{p}^\mathrm{c}_{d,r}, \bar{e}^\mathrm{ns}_{d,r} ,\bar{e}^\mathrm{s}_{n}, \delta\bar{e}^\mathrm{s}_{d,r}  \, |\, d \in \mathcal{D}, r \in \mathcal{R}, n \in \mathcal{N}\right\}$ that minimize the objective function $\bar{J}$, defined as
 
@@ -1396,6 +1397,7 @@ def _(OPER_COST_STOR_CH, OPER_COST_STOR_DIS, STOR_EFF_CH, STOR_EFF_DIS, pyo):
         model.obj = pyo.Objective(rule=rule_objective, sense=pyo.minimize)
 
         return model
+
     return (create_rep_model,)
 
 
@@ -1556,6 +1558,7 @@ def _(
         return len(set(mapping.values())) * 24
       else:
         return len(set(mapping.values()))
+
     return evaluate_mapping, length, plot_investments_results
 
 
