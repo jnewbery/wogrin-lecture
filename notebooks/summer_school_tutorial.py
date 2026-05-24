@@ -8,27 +8,21 @@ __generated_with = "0.23.8"
 app = marimo.App(width="medium")
 
 
-@app.cell
-def _():
-    import marimo as mo
-
-    return (mo,)
-
-
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    # **Time Series Aggregation for Generation Expansion Planning with Energy Storage System: A Step-by-Step Tutorial**
-    """)
-    return
+    # Time Series Aggregation for Generation Expansion Planning with Energy Storage System: A Step-by-Step Tutorial
 
-
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
     This notebook is designed as a tutorial accompanying [Prof. Sonja Wogrin](https://www.tugraz.at/en/institutes/iee/institute/team/wogrin-sonja)'s talk at the [DTU PES Summer School 2026](https://energy-markets-school.dk/).
 
-    **Content Summary**: This tutorial covers time series aggregation for generation expansion planning (GEP) with intertemporal constraints. By the end of the tutorial, you will be tasked with two **challenges**. The first challenge is to cluster the input time series of a specific GEP problem while minimizing the **output error**, i.e., the difference between the optimal objective function values of the full-scale and the aggregated models. The second challenge is to derive with the aggregated model **upper and lower bounds** for the optimal full-scale solution.
+    ## Summary
+
+    This tutorial covers time series aggregation for generation expansion planning (GEP) with intertemporal constraints. By the end of the tutorial, you will be tasked with two challenges:
+
+    - The first challenge is to cluster the input time series of a specific GEP problem while minimizing the **output error**, i.e., the difference between the optimal objective function values of the full-scale and the aggregated models.
+    - The second challenge is to derive with the aggregated model **upper and lower bounds** for the optimal full-scale solution.
+
+    ## Contents
 
     The notebook is structured as follows:
 
@@ -40,11 +34,13 @@ def _(mo):
     6. **Evaluation**: Presents the evaluation methodology for the clustering techniques.
     7. **Challenge**: Provides the instructions for the tutorial challenges.
 
+    ## Acknowledgements and Referencing
+
     This tutorial was developed as part of the European Research Council (ERC) project [NetZero-Opt](https://www.tugraz.at/en/institutes/iee/research/current-projects/netzero-opt) (Grant No. 101116212).
 
     If you would like to reference this tutorial, please cite the following paper, as the content presented here is based on the findings of this research:
 
-    *   S. Wogrin, "Time Series Aggregation for Optimization: One-Size-Fits-All?," *IEEE Transactions on Smart Grid*, vol. 14, no. 3, pp. 2489-2492, May 2023, doi: 10.1109/TSG.2023.3242467. [Link](https://ieeexplore.ieee.org/abstract/document/10037240).
+    *   S. Wogrin, "Time Series Aggregation for Optimization: One-Size-Fits-All?," *IEEE Transactions on Smart Grid*, vol. 14, no. 3, pp. 2489-2492, May 2023, doi: [10.1109/TSG.2023.3242467](https://doi.org/10.1109/TSG.2023.3242467).
     """)
     return
 
@@ -65,6 +61,7 @@ def _():
     import requests
     import time
 
+    import marimo as mo
     import matplotlib.pyplot as plt
     import numpy as np
     import pandas as pd
@@ -77,6 +74,7 @@ def _():
         MinMaxScaler,
         Path,
         copy,
+        mo,
         np,
         os,
         pd,
@@ -100,13 +98,22 @@ def _(mo):
     mo.md(r"""
     ## 2.1. Set the values for the simulation parameters
 
-    * **Time Horizon**: The cardinality of the set of time steps $\mathcal{T}$ considered in the simulation, is denoted by $T$ (`T`).
-    * **Operational Costs**: The electricity generation costs (€/MWh) for wind and thermal power plants are denoted by $C^\mathrm{op,w}$ (`OPER_COST_WIND`) and $C^\mathrm{op,th}$ (`OPER_COST_THERMAL`), respectively. The costs associated with energy storage charging and discharging (€/MWh) are represented by $C^{\mathrm{c,s}}$ (`OPER_COST_STOR_CH`) and $C^{\mathrm{d,s}}$ (`OPER_COST_STOR_CH`) respectively.
-    * **Storage Parameters**: The charging and discharging efficiencies of the storage are denoted by $\eta^{\mathrm{c,s}}$ (`STOR_EFF_CH`) and $\eta^{\mathrm{d,s}}$ (`STOR_EFF_DIS`) respectively. The energy to power ratio (h) is denoted by $\tau$ (`STOR_ETP`).
-    * **Non-Supplied Energy Cost**: The penalty cost (€/MWh) for non-supplied energy is denoted by $C^\mathrm{nse}$ (`OPER_COST_STOR_CH`).
-    * **Investment Costs**: The capital cost (€/MW) for wind, thermal and storage capacity expansion are denoted by $C^\mathrm{inv,w}$ (`INV_COST_WIND`), $C^\mathrm{inv,th}$ (`INV_COST_THERMAL`) and $C^\mathrm{inv,s}$ (`INV_COST_STOR`), respectively.
+    /// warning | Do not modify the values assigned to these parameters
+    ///
 
-    **Do not modify the values assigned to these parameters.**
+    * **Time Horizon**:
+      * The cardinality of the set of time steps $\mathcal{T}$ considered in the simulation, is denoted by $T$ (`T`).
+    * **Operational Costs**:
+      * The electricity generation costs (€/MWh) for wind farms are denoted by $C^\mathrm{op,w}$ (`OPER_COST_WIND`)
+      * The electricity generation costs (€/MWh) of thermal power plants are denoted by $C^\mathrm{op,th}$ (`OPER_COST_THERMAL`)
+      * The costs associated with energy storage charging and discharging (€/MWh) are represented by $C^{\mathrm{c,s}}$ (`OPER_COST_STOR_CH`) and $C^{\mathrm{d,s}}$ (`OPER_COST_STOR_CH`) respectively.
+    * **Storage Parameters**:
+      * The charging and discharging efficiencies of the storage are denoted by $\eta^{\mathrm{c,s}}$ (`STOR_EFF_CH`) and $\eta^{\mathrm{d,s}}$ (`STOR_EFF_DIS`) respectively.
+      * The energy to power ratio (h) is denoted by $\tau$ (`STOR_ETP`).
+    * **Non-Supplied Energy Cost**:
+      * The penalty cost (€/MWh) for non-supplied energy is denoted by $C^\mathrm{nse}$ (`OPER_COST_STOR_CH`).
+    * **Investment Costs**:
+      * The capital cost (€/MW) for wind, thermal and storage capacity expansion are denoted by $C^\mathrm{inv,w}$ (`INV_COST_WIND`), $C^\mathrm{inv,th}$ (`INV_COST_THERMAL`) and $C^\mathrm{inv,s}$ (`INV_COST_STOR`), respectively.
     """)
     return
 
@@ -153,7 +160,7 @@ def _(mo):
     mo.md(r"""
     ## 2.2. Load input data
 
-    Fetch `input_data` from `JakubRybka/Tutorial_input_data` repo if not already fetched.
+    Fetch `input_data` from the [JakubRybka/Tutorial_input_data](https://github.com/JakubRybka/Tutorial_input_data/) repo and save to `/data` if not already fetched.
 
     Load `input_data.xlsx` from `/data` directory.
 
