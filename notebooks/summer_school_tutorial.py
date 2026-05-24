@@ -303,23 +303,68 @@ def _(mo):
 
     The problem is formulated as a discrete-time optimization model, spanning a time horizon $t = 1, \dots, T$, with a sampling time of $\Delta$ (1 hour).
 
+    ### Decision variables
+
     Let $x^\mathrm{w}$, $x^\mathrm{th}$ and $x^\mathrm{s}$ represent the installed capacities (MW) of the wind, thermal, and storage units, respectively. Similarly, let $p^\mathrm{w}_t$ and $p^\mathrm{th}_t$ denote the power generation (MW) of the wind and thermal units at time step $t$, respectively, while $p^\mathrm{c}_t$ and $p^\mathrm{d}_t$ denote the charging and discharging power (MW) of the energy storage system. Let the storage state of charge (MWh) be denoted by $e^\mathrm{s}_t$, while $e^\mathrm{ns}_t$ denotes the non-supplied energy demand (MWh) at time step $t$.
 
-    The goal of the full-scale optimization model is to determine the optimal values of the decision variables $\left\{x^\mathrm{w}, x^\mathrm{th},x^\mathrm{s}, p^\mathrm{w}_t, p^\mathrm{th}_t, e^\mathrm{ns}_t , p^\mathrm{c}_t , p^\mathrm{d}_t, e^{\mathrm{s}}_t|\, t \in \mathcal{T}\right\}$ that minimize the objective function $J$ defined as
+    ### Objective function
 
-    $J := C^{\mathrm{inv,w}} x^\mathrm{w} + C^\mathrm{inv,s} x^\mathrm{s} + C^\mathrm{inv,th} x^\mathrm{th} + \sum_{t=1}^T \left(C^\mathrm{op,w} p^\mathrm{w}_t \Delta + C^\mathrm{op,th} p^\mathrm{th}_t \Delta + C^\mathrm{nse} e^\mathrm{ns}_t + C^\mathrm{c,s} p^\mathrm{c}_t \Delta + C^\mathrm{d,s} p^\mathrm{d}_t \Delta\right)$,
+    The goal of the full-scale optimization model is to determine the optimal values of the decision variables $\left\{x^\mathrm{w}, x^\mathrm{th},x^\mathrm{s}, p^\mathrm{w}_t, p^\mathrm{th}_t, e^\mathrm{ns}_t , p^\mathrm{c}_t , p^\mathrm{d}_t, e^{\mathrm{s}}_t|\, t \in \mathcal{T}\right\}$ that minimize the objective function $J$ defined as:
 
-    subject to the following constraints:
+    \begin{equation}
+      J := C^{\mathrm{inv,w}} x^\mathrm{w} + C^\mathrm{inv,s} x^\mathrm{s} + C^\mathrm{inv,th} x^\mathrm{th} + \sum_{t=1}^T \left(C^\mathrm{op,w} p^\mathrm{w}_t \Delta + C^\mathrm{op,th} p^\mathrm{th}_t \Delta + C^\mathrm{nse} e^\mathrm{ns}_t + C^\mathrm{c,s} p^\mathrm{c}_t \Delta + C^\mathrm{d,s} p^\mathrm{d}_t \Delta\right)
+    \end{equation}
 
-    * Thermal power generation limits: $0 \leq p^\mathrm{th}_t \leq x^\mathrm{th}, \, \forall t$.
-    * Wind power generation limits: $0 \leq p^\mathrm{w}_t \leq CF^\mathrm{w}_t x^\mathrm{w}, \, \forall t$.
-    * Energy balance constraints: $\left(p^\mathrm{th}_t + p^\mathrm{w}_t - p^\mathrm{c}_t + p^\mathrm{d}_t \right) \Delta + e^\mathrm{ns}_t = D_t, \, \forall t$.
-    * Energy storage state of charge dynamics: $e^{\mathrm{s}}_{t+1} = e^{\mathrm{s}}_t +\left(\eta^\mathrm{c,s} p_{t}^\mathrm{c} - \frac{p_{t}^\mathrm{d}}{\eta^\mathrm{d,s}}\right)Δ, \forall t \in \mathcal{T} \setminus \{T\}$.
-    * Energy storage boundary constraints: $e^{\mathrm{s}}_T + \left(\eta^\mathrm{c,s} p_{T}^\mathrm{c} - \frac{p_{T}^\mathrm{d}}{\eta^\mathrm{d,s}}\right)Δ = e^{\mathrm{s}}_1$,<br>
-    $\qquad\qquad\qquad\qquad\qquad\qquad\qquad \,\, e^{\mathrm{s}}_1=0$.
-    * Energy storage state of charge limits: $0\leq e^s_t \leq x^\mathrm{s}\tau, \forall t$.
-    * Storage charging power limits: $0\leq p^\mathrm{c}_t \leq x^\mathrm{s}, \forall t$.
-    * Storage discharging power limits: $0\leq p^\mathrm{d}_t \leq x^\mathrm{s}, \forall t$.
+    ### Constraints
+
+    * Thermal power generation limits:
+
+    \begin{equation}
+      0 \leq p^\mathrm{th}_t \leq x^\mathrm{th}, \, \forall t \tag{2}
+    \end{equation}
+
+    * Wind power generation limits:
+
+    \begin{equation}
+      0 \leq p^\mathrm{w}_t \leq CF^\mathrm{w}_t x^\mathrm{w}, \, \forall t \tag{3}
+    \end{equation}
+
+    * Energy balance constraints:
+
+    \begin{equation}
+      \left(p^\mathrm{th}_t + p^\mathrm{w}_t - p^\mathrm{c}_t + p^\mathrm{d}_t \right) \Delta + e^\mathrm{ns}_t = D_t, \, \forall t \tag{4}
+    \end{equation}
+
+    * Energy storage state of charge dynamics:
+
+    \begin{equation}
+      e^{\mathrm{s}}_{t+1} = e^{\mathrm{s}}_t +\left(\eta^\mathrm{c,s} p_{t}^\mathrm{c} - \frac{p_{t}^\mathrm{d}}{\eta^\mathrm{d,s}}\right)Δ, \forall t \in \mathcal{T} \setminus \{T\} \tag{5}
+    \end{equation}
+
+    * Energy storage boundary constraints:
+
+    \begin{equation}
+      e^{\mathrm{s}}_T + \left(\eta^\mathrm{c,s} p_{T}^\mathrm{c} - \frac{p_{T}^\mathrm{d}}{\eta^\mathrm{d,s}}\right)Δ = e^{\mathrm{s}}_1
+      \qquad e^{\mathrm{s}}_1=0 \tag{6}
+    \end{equation}
+
+    * Energy storage state of charge limits:
+
+    \begin{equation}
+      0\leq e^s_t \leq x^\mathrm{s}\cdot\tau, \forall t \tag{7}
+    \end{equation}
+
+    * Storage charging power limits:
+
+    \begin{equation}
+      0\leq p^\mathrm{c}_t \leq x^\mathrm{s}, \forall t \tag{8}
+    \end{equation}
+
+    * Storage discharging power limits:
+
+    \begin{equation}
+      0\leq p^\mathrm{d}_t \leq x^\mathrm{s}, \forall t \tag{9}
+    \end{equation}
     """)
     return
 
@@ -341,11 +386,19 @@ def _(
     input_data,
     pyo,
 ):
-    def create_full_model(input_data,T, inv_cost_wind, inv_cost_thermal, oper_cost_wind,
-                          oper_cost_thermal, oper_cost_nse, stor_etp, inv_cost_stor):
+    def create_full_model(input_data,
+                          T,
+                          inv_cost_wind,
+                          inv_cost_thermal,
+                          inv_cost_stor,
+                          oper_cost_wind,
+                          oper_cost_thermal,
+                          oper_cost_nse,
+                          stor_etp):
         # Create optimization model
         full_model = pyo.ConcreteModel(name="Investment_Problem")
 
+        # Initialize time steps
         full_model.T = pyo.Set(initialize=list(range(T)))
 
         # Define parameters
@@ -435,8 +488,16 @@ def _(
         return full_model
 
     # Create and solve the model
-    full_model = create_full_model(input_data, T, INV_COST_WIND, INV_COST_THERMAL, OPER_COST_WIND,
-                                OPER_COST_THERMAL, OPER_COST_NSE, STOR_ETP, INV_COST_STOR)
+    full_model = create_full_model(input_data=input_data,
+                                   T=T,
+                                   inv_cost_wind=INV_COST_WIND,
+                                   inv_cost_thermal=INV_COST_THERMAL,
+                                   inv_cost_stor=INV_COST_STOR,
+                                   oper_cost_wind=OPER_COST_WIND,
+                                   oper_cost_thermal=OPER_COST_THERMAL,
+                                   oper_cost_nse=OPER_COST_NSE,
+                                   stor_etp=STOR_ETP,
+                                   )
     solver = pyo.SolverFactory('highs')
     res = solver.solve(full_model)
 
@@ -459,26 +520,26 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    This section presents examples of **clustering techniques** that can be used for time series aggregation to construct the aggregated GEP model. These clustering techniques define **mappings** from the original time steps to representative time steps.
+    This section presents examples of clustering techniques that can be used for time series aggregation to construct the aggregated GEP model. These clustering techniques define mappings from the original time steps to representative time steps.
 
-    Clustering input time series is motivated by the necessity to **reduce the computational complexity** of large-scale optimization problems. However, this simplification requires alternative formulations, namely **the aggregated optimization models**, detailed in the section 5.
+    Clustering input time series is motivated by the necessity to reduce the computational complexity of large-scale optimization problems. However, this simplification requires alternative formulations, namely the aggregated optimization models, detailed in section 5.
 
-    The presence of **storage intertemporal constraints** requires clustering techniques and alternative model formulations that **preserve chronology**. This is challenging because standard clustering techniques often disregard temporal chronology.
+    The presence of storage intertemporal constraints requires clustering techniques and alternative model formulations that preserve chronology. This is challenging because standard clustering techniques often disregard temporal chronology.
 
     Solving the aggregated optimization model generally results in an **output error**, i.e., a difference in the optimal objective function values between the full-scale and aggregated optimization models. The following clustering techniques are implemented to analyze their impact on the accuracy of the aggregated models:
 
-    * **K-Means clustering (rep. hours + chronology)** (`chronological_kmeans_clustering`): A widely used clustering technique, [K-Means](https://scikit-learn.org/stable/modules/generated/sklearn.cluster.KMeans.html) partitions the data into $K$ clusters by iteratively assigning each data point to the nearest centroid and updating the centroids based on the mean of the assigned samples. This process continues until convergence, minimizing the within-cluster variance (i.e., the sum of squared distances from samples to their respective centroids). Since standard clustering techniques do not preserve chronology, we include a ``chronologize`` function $^{[1]}$ which preserves temporal continuity by grouping only consecutive time steps assigned to the same cluster.
+    * **K-Means clustering (rep. hours + chronology)** (`chronological_kmeans_clustering()`): A widely used clustering technique, [K-Means](https://scikit-learn.org/stable/modules/generated/sklearn.cluster.KMeans.html) partitions the data into $K$ clusters by iteratively assigning each data point to the nearest centroid and updating the centroids based on the mean of the assigned samples. This process continues until convergence, minimizing the within-cluster variance (i.e., the sum of squared distances from samples to their respective centroids). Since standard clustering techniques do not preserve chronology, we include a ``chronologize`` function $^{[1]}$ which preserves temporal continuity by grouping only consecutive time steps assigned to the same cluster.
 
-    * **K-Means clustering (rep. days)** (`rep_clustering`): Rather than clustering individual time steps, this technique clusters complete 24-hour profiles $^{[2]}$. K-Means clustering is applied to these daily profiles, and a representative day is selected for each cluster.
+    * **K-Means clustering (rep. days)** (`rep_clustering()`): Rather than clustering individual time steps, this technique clusters complete 24-hour profiles $^{[2]}$. K-Means clustering is applied to these daily profiles, and a representative day is selected for each cluster.
 
-    * **Chronological hierarchical clustering** (`CH_clustering`): A clustering technique that iteratively merges consecutive time steps with minimal Ward distance in input space$^{[3]}$. The clustering process starts with each time step constituting its cluster, and proceeds until the desired number of clusters is reached.
+    * **Chronological hierarchical clustering** (`CH_clustering()`): A clustering technique that iteratively merges consecutive time steps with minimal [Ward distance](https://en.wikipedia.org/wiki/Ward%27s_method) in input space$^{[3]}$. The clustering process starts with each time step constituting its cluster, and proceeds until the desired number of clusters is reached.
 
     ---
-    <small>$^{[1]}$ J. Mannhardt, L. Kunz, and G. Sansavini, "Accurately modeling long-term storage with minimum representative hours in large-scale renewable energy systems," 2025. arXiv:2512.00892. [Link](https://arxiv.org/abs/2512.00892)</small>
+    <small>$^{[1]}$ J. Mannhardt, L. Kunz, and G. Sansavini, "Accurately modeling long-term storage with minimum representative hours in large-scale renewable energy systems," 2025. doi: [10.48550/arXiv.2512.00892](https://doi.org/10.48550/arXiv.2512.00892))</small>
 
-    <small>$^{[2]}$ L. Kotzur, P. Markewitz, M. Robinius, D. Stolten, "Time series aggregation for energy system design: Modeling seasonal storage," *Applied Energy*, vol. 213, pp. 123-135, Mar. 2018, doi:10.1016/j.apenergy.2018.01.023. [Link](https://www.sciencedirect.com/science/article/pii/S0306261918300242)</small>
+    <small>$^{[2]}$ L. Kotzur, P. Markewitz, M. Robinius, D. Stolten, "Time series aggregation for energy system design: Modeling seasonal storage," *Applied Energy*, vol. 213, pp. 123-135, Mar. 2018, doi: [10.1016/j.apenergy.2018.01.023](https://www.sciencedirect.com/science/article/pii/S0306261918300242)</small>
 
-    <small>$^{[3]}$ S. Pineda and J. M. Morales, "Chronological time-period clustering for optimal capacity expansion planning with storage," *IEEE Transactions on Power Systems*, vol. 33, no. 6, pp. 7162-7170, Nov. 2018, doi: 10.1109/TPWRS.2018.2842093. [Link](https://doi.org/10.1109/TPWRS.2018.2842093)</small>
+    <small>$^{[3]}$ S. Pineda and J. M. Morales, "Chronological time-period clustering for optimal capacity expansion planning with storage," *IEEE Transactions on Power Systems*, vol. 33, no. 6, pp. 7162-7170, Nov. 2018, doi: [10.1109/TPWRS.2018.2842093](https://doi.org/10.1109/TPWRS.2018.2842093)</small>
     """)
     return
 
@@ -626,7 +687,7 @@ def _(chronologize, input_data, kmeans_clustering):
 @app.cell
 def _(mo):
     mo.md(r"""
-    **Figure: K-Means clustering**
+    ### Figure: K-Means clustering
     """)
     return
 
@@ -650,8 +711,8 @@ def _(K, input_data, kmeans_centroids_shifted, kmeans_labels_shifted, np, plt):
                    markerfacecolor=cluster_colors[cid], markersize=10)
         for cid in unique_clusters
     ]
-
     plt.legend(handles=legend_elements, loc='upper right', title="Cluster", title_fontsize=16, fontsize=16, markerscale=1, framealpha=1)
+
     plt.show()
     return (cluster_colors,)
 
@@ -673,7 +734,7 @@ def _(
     np,
     plt,
 ):
-    R = 72  # Exemplary hours (a day)
+    R = 72  # Exemplary hours
     P = 22  # which day to show?
 
     # 1. Calculate aggregated means for demand and wind for each unique chronological K-Means cluster
