@@ -1703,7 +1703,7 @@ def _(
       ax.set_axisbelow(True)
 
       plt.tight_layout()
-      plt.show()
+      return fig
 
     def length(mapping):
       temp = len(mapping)
@@ -1729,21 +1729,13 @@ def _(
     chronological_kmeans_mapping,
     evaluate_mapping,
     full_model,
-):
-    # Calculate Output error
-    print(f"Relative output error = {evaluate_mapping(chronological_kmeans_mapping,full_model,aggregated_model_kmeans):.2f} %")
-    return
-
-
-@app.cell
-def _(
-    aggregated_model_kmeans,
-    chronological_kmeans_mapping,
-    full_model,
+    mo,
     plot_investments_results,
 ):
-    # Visualize investment results
-    plot_investments_results(chronological_kmeans_mapping, full_model, aggregated_model_kmeans)
+    _error_msg = f"Relative output error = {evaluate_mapping(chronological_kmeans_mapping,full_model,aggregated_model_kmeans):.2f} %"
+    _plot = plot_investments_results(chronological_kmeans_mapping, full_model, aggregated_model_kmeans)
+
+    mo.vstack([_error_msg, _plot])
     return
 
 
@@ -1763,9 +1755,18 @@ def _(CH_mapping, aggregated_model_CH, evaluate_mapping, full_model):
 
 
 @app.cell
-def _(CH_mapping, aggregated_model_CH, full_model, plot_investments_results):
-    # Visualize investment results
-    plot_investments_results(CH_mapping,full_model,aggregated_model_CH)
+def _(
+    CH_mapping,
+    aggregated_model_CH,
+    evaluate_mapping,
+    full_model,
+    mo,
+    plot_investments_results,
+):
+    _error_msg = f"Relative output error = {evaluate_mapping(CH_mapping, full_model, aggregated_model_CH):.2f} %"
+    _plot = plot_investments_results(CH_mapping,full_model,aggregated_model_CH)
+
+    mo.vstack([_error_msg, _plot])
     return
 
 
@@ -1778,16 +1779,19 @@ def _(mo):
 
 
 @app.cell
-def _(evaluate_mapping, full_model, kmeans_mapping, rep_model):
-    # Calculate Output error
-    print(f"Relative output error = {evaluate_mapping(kmeans_mapping, full_model, rep_model):.2f} %")
-    return
+def _(
+    evaluate_mapping,
+    full_model,
+    kmeans_mapping,
+    mo,
+    plot_investments_results,
+    rep_mapping,
+    rep_model,
+):
+    _error_msg = f"Relative output error = {evaluate_mapping(kmeans_mapping, full_model, rep_model):.2f} %"
+    _plot = plot_investments_results(rep_mapping,full_model,rep_model)
 
-
-@app.cell
-def _(full_model, plot_investments_results, rep_mapping, rep_model):
-    # Visualize investment results
-    plot_investments_results(rep_mapping,full_model,rep_model)
+    mo.vstack([_error_msg, _plot])
     return
 
 
@@ -1820,6 +1824,12 @@ def _(mo):
 
 
 @app.cell
+def _(T):
+    my_mapping = {t: 0 for t in range(T)}  # replace this with a better mapping!
+    return (my_mapping,)
+
+
+@app.cell
 def _(
     evaluate_mapping,
     full_model,
@@ -1835,11 +1845,12 @@ def _(
       print(f"Size of aggregated model: {size}")
       print(f"Relative output error of the aggregated model: {evaluate_mapping(my_mapping,full_model):.2f} %")
       mo.stop()
-    else:
-      print(f"Size of aggregated model: {size}")
-      print(f"Relative output error of the aggregated model: {evaluate_mapping(my_mapping,full_model):.2f} %")
-      # Visualize the optimal investment results for your mapping
-      plot_investments_results(my_mapping,full_model)
+
+    _size_msg = f"Size of aggregated model: {size}"
+    _error_msg = f"Relative output error of the aggregated model: {evaluate_mapping(my_mapping,full_model):.2f} %"
+    _plot = plot_investments_results(my_mapping,full_model)
+
+    mo.vstack([_size_msg, _error_msg, _plot])
     return
 
 
@@ -1849,7 +1860,7 @@ def _(mo):
     Feeling a bit lost? Here are some suggestions to guide you:
 
     * You may reduce the number of time steps used in the chronological hierarchical clustering approach or decrease the number of representative days to remain below the limit of 500 representative time steps.
-    * You may adapt the `CH_clustering` function from Section 4 and modify it by altering its *distance measure*.
+    * You may adapt the `CH_clustering()` function from Section 4 and modify it by altering its *distance measure*.
     * Alternatively, you may implement other clustering techniques available in [clustering techniques](https://scikit-learn.org/stable/modules/clustering.html).
     * You could also download and analyze the [input data](https://github.com/JakubRybka/Tutorial_input_data.git), then assign time steps to **the 500 representative time steps** based on a custom policy (e.g., assign a time step $t$ to a specific cluster $k$ if the demand at time $t$ exceeds a certain threshold).
     """)
@@ -1890,7 +1901,7 @@ def _(mo):
     Please submit the number of used representative time steps here: [Submission form](https://forms.gle/Cyi6Zff6tn2mpRxi6)
 
     ---
-    <small> $^{[1]}$ L. Santosuosso, B. Klinz, and S. Wogrin, "What Are We Clustering For? Establishing Performance Guarantees for Time Series Aggregation in Generation Expansion Planning," 2025, arXiv:2510.09357. [Link](https://arxiv.org/abs/2510.09357)
+    <small> $^{[1]}$ L. Santosuosso, B. Klinz, and S. Wogrin, "What Are We Clustering For? Establishing Performance Guarantees for Time Series Aggregation in Generation Expansion Planning," 2025, doi: [10.48550/arXiv.2510.09357](https://doi.org/10.48550/arXiv.2510.09357)</small>
     """)
     return
 
