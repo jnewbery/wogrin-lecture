@@ -687,7 +687,7 @@ def _(chronologize, input_data, kmeans_clustering):
 @app.cell
 def _(mo):
     mo.md(r"""
-    ### Figure: K-Means clustering
+    ### K-Means clustering visualisations
     """)
     return
 
@@ -715,14 +715,6 @@ def _(K, input_data, kmeans_centroids_shifted, kmeans_labels_shifted, np, plt):
 
     plt.show()
     return (cluster_colors,)
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
-    **Visualization:**
-    """)
-    return
 
 
 @app.cell
@@ -839,7 +831,7 @@ def _(CH_clustering, input_data):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    **Visualization:**
+    ### Chronological hierarchical clustering visualisation
     """)
     return
 
@@ -967,6 +959,14 @@ def _(input_data, rep_clustering):
     return rep_centroids_shifted, rep_labels_shifted, rep_mapping
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### Representative day clustering visualisation
+    """)
+    return
+
+
 @app.cell
 def _(input_data, plt, rep_centroids_shifted, rep_labels_shifted):
     _R = 24  # Number of hours in a representative period (a day)
@@ -1079,21 +1079,63 @@ def _(mo):
 
     Let $K$ denote the size of the set of clusters $\mathcal{K}$, indexed by $k=1, \dots, K$. Each time step $t=1, \dots, T$ is assigned to one of the $K$ clusters. Let $W_k$ denote the number of the original time steps assigned to the $k$-th cluster, and let $\mathcal{T}_k$ denote the set of consecutive time steps assigned to the $k$-th cluster.
 
+    ## Objective Function
+
     The goal of the aggregated GEP model is to determine the optimal values of the (aggregated) decision variables $\left\{\bar{x}^\mathrm{w}, \bar{x}^\mathrm{th}, \bar{x}^\mathrm{s},\bar{p}^\mathrm{w}_k, \bar{p}^\mathrm{th}_k,\bar{p}^\mathrm{d}_k,\bar{p}^\mathrm{c}_k, \bar{e}^\mathrm{ns}_k ,\bar{e}^\mathrm{s}_k\, |\, k \in \mathcal{K}\right\}$ that minimize the objective function $\bar{J}$ defined as
 
-    $\displaystyle \bar{J} := C^{\mathrm{inv,w}} \bar{x}^\mathrm{w} + C^\mathrm{inv,th} \bar{x}^\mathrm{th} + C^\mathrm{inv,s}\bar{x}^\mathrm{s} + \sum_{k=1}^{K} W_k \Big( C^\mathrm{op,w} \bar{p}^\mathrm{w}_k \Delta + C^\mathrm{op,th} \bar{p}^\mathrm{th}_k \Delta + C^\mathrm{nse} \bar{e}^\mathrm{ns}_k + C^\mathrm{c,s} \bar{p}^\mathrm{c}_k \Delta + C^\mathrm{d,s} \bar{p}^\mathrm{d}_k \Delta \Big)$
+    \begin{equation}
+      \displaystyle \bar{J} := C^{\mathrm{inv,w}} \bar{x}^\mathrm{w} + C^\mathrm{inv,th} \bar{x}^\mathrm{th} + C^\mathrm{inv,s}\bar{x}^\mathrm{s} + \sum_{k=1}^{K} W_k \Big( C^\mathrm{op,w} \bar{p}^\mathrm{w}_k \Delta + C^\mathrm{op,th} \bar{p}^\mathrm{th}_k \Delta + C^\mathrm{nse} \bar{e}^\mathrm{ns}_k + C^\mathrm{c,s} \bar{p}^\mathrm{c}_k \Delta + C^\mathrm{d,s} \bar{p}^\mathrm{d}_k \Delta \Big)  \tag{1}
+    \end{equation}
 
-    subject to the following constraints:
+    ## Constraints
 
-    * Thermal power generation limits: $0 \leq \bar{p}^\mathrm{th}_k \leq \bar{x}^\mathrm{th}, \, \forall k$.
-    * Wind power generation limits: $0 \leq \bar{p}^\mathrm{w}_k \leq \bar{x}^\mathrm{w} \frac{1}{W_k} \sum_{t \in \mathcal{T}_k} CF^\mathrm{w}_t, \, \forall k$.
-    * Energy balance constraints: $\left(\bar{p}^\mathrm{th}_k + \bar{p}^\mathrm{w}_k - \bar{p}^\mathrm{c}_k + \bar{p}^\mathrm{d}_k\right) \Delta + \bar{e}^\mathrm{ns}_k = \frac{1}{W_k} \sum_{t \in \mathcal{T}_k} D_t, \, \forall k$.
-    * Energy storage state of charge dynamics: $\bar{e}^{\mathrm{s}}_{k+1} = \bar{e}^{\mathrm{s}}_k +\left(\eta^\mathrm{c,s} \bar{p}_{k}^\mathrm{c} - \frac{\bar{p}_{k}^\mathrm{d}}{\eta^\mathrm{d,s}}\right)W_k Δ, \forall k \in \mathcal{K} \setminus \{K\}$.
-    * Energy storage boundary constraints: $\bar{e}^{\mathrm{s}}_{K} +\left(\eta^\mathrm{c,s} \bar{p}_{K}^\mathrm{c} - \frac{\bar{p}_{K}^\mathrm{d}}{\eta^\mathrm{d,s}}\right)W_KΔ = \bar{e}^{\mathrm{s}}_1$, <br>
-    $\qquad\qquad\qquad\qquad\qquad\qquad\qquad \, \bar{e}^{\mathrm{s}}_1=0$.
-    * Energy storage state of charge limits: $0\leq \bar{e}^s_k \leq \bar{x}^\mathrm{s}\tau, \forall k$.
-    * Storage charging power limits: $0\leq \bar{p}^\mathrm{c}_k \leq \bar{x}^\mathrm{s}, \forall k$.
-    * Storage discharging power limits: $0\leq \bar{p}^\mathrm{d}_k \leq \bar{x}^\mathrm{s}, \forall k$.
+    * Thermal power generation limits:
+
+    \begin{equation}
+      0 \leq \bar{p}^\mathrm{th}_k \leq \bar{x}^\mathrm{th}, \, \forall k  \tag{2}
+    \end{equation}
+
+    * Wind power generation limits
+
+    \begin{equation}
+      0 \leq \bar{p}^\mathrm{w}_k \leq \bar{x}^\mathrm{w} \frac{1}{W_k} \sum_{t \in \mathcal{T}_k} CF^\mathrm{w}_t, \, \forall k \tag{3}
+    \end{equation}
+
+    * Energy balance constraints:
+
+    \begin{equation}
+      \left(\bar{p}^\mathrm{th}_k + \bar{p}^\mathrm{w}_k - \bar{p}^\mathrm{c}_k + \bar{p}^\mathrm{d}_k\right) \Delta + \bar{e}^\mathrm{ns}_k = \frac{1}{W_k} \sum_{t \in \mathcal{T}_k} D_t, \, \forall k \tag{4}
+    \end{equation}
+
+    * Energy storage state of charge dynamics:
+
+    \begin{equation}
+      \bar{e}^{\mathrm{s}}_{k+1} = \bar{e}^{\mathrm{s}}_k +\left(\eta^\mathrm{c,s} \bar{p}_{k}^\mathrm{c} - \frac{\bar{p}_{k}^\mathrm{d}}{\eta^\mathrm{d,s}}\right)W_k Δ, \forall k \in \mathcal{K} \setminus \{K\} \tag{5}
+    \end{equation}
+
+    * Energy storage boundary constraints:
+
+    \begin{equation}
+      \bar{e}^{\mathrm{s}}_{K} +\left(\eta^\mathrm{c,s} \bar{p}_{K}^\mathrm{c} - \frac{\bar{p}_{K}^\mathrm{d}}{\eta^\mathrm{d,s}}\right)W_KΔ = \bar{e}^{\mathrm{s}}_1\qquad \bar{e}^{\mathrm{s}}_1=0 \tag{6}
+    \end{equation}
+
+    * Energy storage state of charge limits
+
+    \begin{equation}
+      0\leq \bar{e}^s_k \leq \bar{x}^\mathrm{s}\tau, \forall k \tag{7}
+    \end{equation}
+
+    * Storage charging power limits:
+
+    \begin{equation}
+      0\leq \bar{p}^\mathrm{c}_k \leq \bar{x}^\mathrm{s}, \forall k \tag{8}
+    \end{equation}
+
+    * Storage discharging power limits:
+
+    \begin{equation}
+      0\leq \bar{p}^\mathrm{d}_k \leq \bar{x}^\mathrm{s}, \forall k \tag{9}
+    \end{equation}
     """)
     return
 
@@ -1326,26 +1368,69 @@ def _(mo):
       <i>Figure: Schematic diagram of the representative-day aggregated model. </i>
     </div>
 
+    ## Objective Function
+
     As before, the goal of the aggregated optimization model is to determine the optimal values of the (aggregated) decision variables $\left\{\bar{x}^\mathrm{w}, \bar{x}^\mathrm{th}, \bar{x}^\mathrm{s},\bar{p}^\mathrm{w}_{d,r}, \bar{p}^\mathrm{th}_{d,r},\bar{p}^\mathrm{d}_{d,r},\bar{p}^\mathrm{c}_{d,r}, \bar{e}^\mathrm{ns}_{d,r} ,\bar{e}^\mathrm{s}_{n}, \delta\bar{e}^\mathrm{s}_{d,r}  \, |\, d \in \mathcal{D}, r \in \mathcal{R}, n \in \mathcal{N}\right\}$ that minimize the objective function $\bar{J}$, defined as
 
-    $\displaystyle \bar{J} := C^{\mathrm{inv,w}} \bar{x}^\mathrm{w} + C^\mathrm{inv,th} \bar{x}^\mathrm{th} + C^\mathrm{inv,s}\bar{x}^\mathrm{s} + \sum_{d=1}^{D} W_d \sum_{r=1}^{R} \Big( C^\mathrm{op,w} \bar{p}^\mathrm{w}_{d,r} \Delta + C^\mathrm{op,th} \bar{p}^\mathrm{th}_{d,r} \Delta + C^\mathrm{nse} \bar{e}^\mathrm{ns}_{d,r} + C^\mathrm{c,s} \bar{p}^\mathrm{c}_{d,r} \Delta + C^\mathrm{d,s}\bar{p}^\mathrm{d}_{d,r} \Delta \Big)$
+    \begin{equation}
+      \displaystyle \bar{J} := C^{\mathrm{inv,w}} \bar{x}^\mathrm{w} + C^\mathrm{inv,th} \bar{x}^\mathrm{th} + C^\mathrm{inv,s}\bar{x}^\mathrm{s} + \sum_{d=1}^{D} W_d \sum_{r=1}^{R} \Big( C^\mathrm{op,w} \bar{p}^\mathrm{w}_{d,r} \Delta + C^\mathrm{op,th} \bar{p}^\mathrm{th}_{d,r} \Delta + C^\mathrm{nse} \bar{e}^\mathrm{ns}_{d,r} + C^\mathrm{c,s} \bar{p}^\mathrm{c}_{d,r} \Delta + C^\mathrm{d,s}\bar{p}^\mathrm{d}_{d,r} \Delta \Big) \tag{1}
+    \end{equation}
 
-    subject to:
+    ## Constraints
 
-    * Thermal power generation limits: $0 \leq \bar{p}^\mathrm{th}_{d,r} \leq \bar{x}^\mathrm{th}, \, \forall d,\forall r$.
-    * Wind power generation limits: $0 \leq \bar{p}^\mathrm{w}_{d,r} \leq \bar{x}^\mathrm{w} \frac{1}{W_{d}} \sum_{t \in \mathcal{T}_{d,r} } CF^\mathrm{w}_t, \, \forall d,\forall r$.
-    * Energy balance constraints: $\left(\bar{p}^\mathrm{th}_{d,r} + \bar{p}^\mathrm{w}_{d,r} - \bar{p}^\mathrm{c}_{d,r} + \bar{p}^\mathrm{d}_{d,r}\right) \Delta + \bar{e}^\mathrm{ns}_{d,r} = \frac{1}{W_d} \sum_{t \in \mathcal{T}_{d,r} } D_t, \, \forall d,\forall r$.
-    * Intra-day energy storage dynamics constraints: $\delta\bar{e}^\mathrm{s}_{d,r+1} = \delta\bar{e}^\mathrm{s}_{d,r} +\left(\eta^\mathrm{c,s} \bar{p}_{d,r}^\mathrm{c} - \frac{\bar{p}_{d,r}^\mathrm{d}}{\eta^\mathrm{d,s}}\right)Δ, \forall d, \forall r \in \mathcal{R} \setminus \{R\}$,<br>
-    $\qquad\qquad\qquad\qquad\qquad\qquad\qquad\qquad\qquad\,\,\,\,$$\delta\bar{e}^\mathrm{s}_{d,1}=0, \forall d$.
-    * Inter-day energy storage dynamics constraints: $\bar{e}^{\mathrm{s}}_{n+1} = \bar{e}^{\mathrm{s}}_{n}+\delta\bar{e}^\mathrm{s}_{d=f(n),R}+ \left(\eta^\mathrm{c,s} \bar{p}_{d=f(n),R}^\mathrm{c} - \frac{\bar{p}_{d=f(n),R}^\mathrm{d}}{\eta^\mathrm{d,s}}\right)Δ\,,\forall n \in \mathcal{N} \setminus \{N\}$,<br>
-    $\qquad\qquad\qquad\qquad\qquad\qquad\qquad\qquad\qquad\,\,\,\,$$\bar{e}^\mathrm{s}_{N}+\delta\bar{e}^\mathrm{s}_{d=f(N),R}+\left(\eta^\mathrm{c,s} \bar{p}_{d=f(N),R}^\mathrm{c} - \frac{\bar{p}_{d=f(N),R}^\mathrm{d}}{\eta^\mathrm{d,s}}\right)Δ=\bar{e}^\mathrm{s}_1$, <br>
-    $\qquad\qquad\qquad\qquad\qquad\qquad\qquad\qquad\qquad \,\,\,\, \bar{e}^{\mathrm{s}}_1=0$.
-    * Energy storage state of charge limits: $0\leq \bar{e}^\mathrm{s}_{n} + \delta\bar{e}^\mathrm{s}_{d=f(n),r} \leq \bar{x}^\mathrm{s}\tau, \forall n, \forall r$.
-    * Storage charging limits: $0\leq \bar{p}^\mathrm{c}_{d,r} \leq \bar{x}^\mathrm{s}, \forall d, \forall r$.
-    * Storage discharging limits: $0\leq \bar{p}^\mathrm{d}_{d,r} \leq \bar{x}^\mathrm{s}, \forall d, \forall r$.
+    * Thermal power generation limits:
+
+    \begin{equation}
+      0 \leq \bar{p}^\mathrm{th}_{d,r} \leq \bar{x}^\mathrm{th}, \, \forall d,\forall r \tag{2}
+    \end{equation}
+
+    * Wind power generation limits:
+
+    \begin{equation}
+      0 \leq \bar{p}^\mathrm{w}_{d,r} \leq \bar{x}^\mathrm{w} \frac{1}{W_{d}} \sum_{t \in \mathcal{T}_{d,r} } CF^\mathrm{w}_t, \, \forall d,\forall r \tag{3}
+    \end{equation}
+
+    * Energy balance constraints:
+
+    \begin{equation}
+      \left(\bar{p}^\mathrm{th}_{d,r} + \bar{p}^\mathrm{w}_{d,r} - \bar{p}^\mathrm{c}_{d,r} + \bar{p}^\mathrm{d}_{d,r}\right) \Delta + \bar{e}^\mathrm{ns}_{d,r} = \frac{1}{W_d} \sum_{t \in \mathcal{T}_{d,r} } D_t, \, \forall d,\forall r \tag{4}
+    \end{equation}
+
+    * Intra-day energy storage dynamics constraints:
+
+    \begin{align}
+      & \delta\bar{e}^\mathrm{s}_{d,r+1} = \delta\bar{e}^\mathrm{s}_{d,r} +\left(\eta^\mathrm{c,s} \bar{p}_{d,r}^\mathrm{c} - \frac{\bar{p}_{d,r}^\mathrm{d}}{\eta^\mathrm{d,s}}\right)Δ, \forall d, \forall r \in \mathcal{R} \setminus \{R\} \tag{5.1} \\
+      & \delta\bar{e}^\mathrm{s}_{d,1}=0, \forall d \tag{5.2}
+    \end{align}
+
+    * Inter-day energy storage dynamics constraints:
+
+    \begin{align}
+      & \bar{e}^{\mathrm{s}}_{n+1} = \bar{e}^{\mathrm{s}}_{n}+\delta\bar{e}^\mathrm{s}_{d=f(n),R}+ \left(\eta^\mathrm{c,s} \bar{p}_{d=f(n),R}^\mathrm{c} - \frac{\bar{p}_{d=f(n),R}^\mathrm{d}}{\eta^\mathrm{d,s}}\right)Δ\,,\forall n \in \mathcal{N} \setminus \{N\} \tag{6.1}\\
+      & \bar{e}^\mathrm{s}_{N}+\delta\bar{e}^\mathrm{s}_{d=f(N),R}+\left(\eta^\mathrm{c,s} \bar{p}_{d=f(N),R}^\mathrm{c} - \frac{\bar{p}_{d=f(N),R}^\mathrm{d}}{\eta^\mathrm{d,s}}\right)Δ=\bar{e}^\mathrm{s}_1 \tag{6.2}\\
+      & \bar{e}^{\mathrm{s}}_1=0 \tag{6.3}
+    \end{align}
+
+    * Energy storage state of charge limits:
+
+    \begin{equation}
+      0\leq \bar{e}^\mathrm{s}_{n} + \delta\bar{e}^\mathrm{s}_{d=f(n),r} \leq \bar{x}^\mathrm{s}\tau, \forall n, \forall r \tag{7}
+    \end{equation}
+
+    * Storage charging limits:
+
+    \begin{equation}
+      0\leq \bar{p}^\mathrm{c}_{d,r} \leq \bar{x}^\mathrm{s}, \forall d, \forall r  \tag{8}
+    \end{equation}
+
+    * Storage discharging limits:
+
+    \begin{equation}
+      0\leq \bar{p}^\mathrm{d}_{d,r} \leq \bar{x}^\mathrm{s}, \forall d, \forall r  \tag{9}
+    \end{equation}
 
     ---
-    <small>$^{[1]}$ L. Kotzur, P. Markewitz, M. Robinius, D. Stolten, "Time series aggregation for energy system design: Modeling seasonal storage," *Applied Energy*, vol. 213, pp. 123-135, Mar. 2018, doi:10.1016/j.apenergy.2018.01.023. [Link](https://www.sciencedirect.com/science/article/pii/S0306261918300242)
+    <small>$^{[1]}$ L. Kotzur, P. Markewitz, M. Robinius, D. Stolten, "Time series aggregation for energy system design: Modeling seasonal storage," *Applied Energy*, vol. 213, pp. 123-135, Mar. 2018, doi: [10.1016/j.apenergy.2018.01.023](https://doi.org/10.1016/j.apenergy.2018.01.023)</small>
     """)
     return
 
@@ -1520,11 +1605,11 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    Once the **mappings** have been generated using the clustering techniques, the following `evaluate_mapping` function is used to assess the quality of the aggregated solution.
+    Once the **mappings** have been generated using the clustering techniques, the `evaluate_mapping()` function is used to assess the quality of the aggregated solution.
 
     This function computes the optimal objective value of the aggregated model introduced in Section 5 using the generated mapping. It then computes the relative difference between this value and the optimal objective value of the full-scale model introduced in Section 3, referred to as the **output error**.
 
-    To analyze the investment decisions, the function `plot_investments_results` is used. The function generates a bar plot comparing the optimal investment capacities obtained from the full-scale and aggregated models.
+    To analyze the investment decisions, the `plot_investments_results()` function is used. The function generates a bar plot comparing the optimal investment capacities obtained from the full-scale and aggregated models.
     """)
     return
 
