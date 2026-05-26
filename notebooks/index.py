@@ -73,7 +73,7 @@ def show_index(ast, mo, pathlib):
     mo.vstack([
         mo.md(
         """
-        # Sonja Wogrin DTU PES Summer School Tutorial
+        # Time Series Aggregation Tutorial
         ---
         """),
         mo.md(table)

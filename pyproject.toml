@@ -1,7 +1,7 @@
 [project]
-name = "marimo-template"
+name = "time-series-aggregation-tutorial"
 version = "0.1.0"
-description = "Template for marimo repositories"
+description = "Tutorial for appling aggregation techniques to time series data"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
