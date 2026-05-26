@@ -1,6 +1,10 @@
 # /// script
 # dependencies = ["pyomo"]
 # ///
+"""
+Title: k-means clustering
+Description: Demonstrates Time Series Aggregation Techniques Using k-means Clustering and Representative Days k-means Clustering
+"""
 
 import marimo
 
@@ -8,17 +12,10 @@ __generated_with = "0.23.8"
 app = marimo.App(width="medium")
 
 
-@app.cell
-def _():
-    import marimo as mo
-
-    return (mo,)
-
-
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    # **Time Series Aggregation for Generation Expansion Planning with Energy Storage System: A Step-by-Step Tutorial**
+    # **Time Series Aggregation Using k-means Clustering and Representative Days k-means Clustering**
     """)
     return
 
@@ -26,25 +23,13 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    This notebook is designed as a tutorial accompanying [Prof. Sonja Wogrin](https://www.tugraz.at/en/institutes/iee/institute/team/wogrin-sonja)'s talk at the [DTU PES Summer School 2026](https://energy-markets-school.dk/).
-
-    **Content Summary**: This tutorial covers time series aggregation for generation expansion planning (GEP) with intertemporal constraints. By the end of the tutorial, you will be tasked with two **challenges**. The first challenge is to cluster the input time series of a specific GEP problem while minimizing the **output error**, i.e., the difference between the optimal objective function values of the full-scale and the aggregated models. The second challenge is to derive with the aggregated model **upper and lower bounds** for the optimal full-scale solution.
+    This notebook demonstrates the use of k-means clustering and representative days k-means clustering to implement time-series aggregation for use in optimisation programs.
 
     The notebook is structured as follows:
 
     1. **Environment Configuration**: Configures the necessary environment for the simulation (dependencies, libraries, and input data sources).
     2. **Set Up Simulation Parameters and Visualize the Input Time Series**: Characterizes the case study by setting up the parameters and visualizing the input time series for analysis.
-    3. **Full-Scale Generation Expansion Planning Model**: Implements the full-scale GEP model.
-    4. **Time Series Aggregation**: Applies clustering techniques for time series aggregation.
-    5. **Aggregated Generation Expansion Planning Model**: Implements the aggregated GEP model, i.e., a reduced version of the full-scale model solved on a selected set of representative time steps (or representative days).
-    6. **Evaluation**: Presents the evaluation methodology for the clustering techniques.
-    7. **Challenge**: Provides the instructions for the tutorial challenges.
-
-    This tutorial was developed as part of the European Research Council (ERC) project [NetZero-Opt](https://www.tugraz.at/en/institutes/iee/research/current-projects/netzero-opt) (Grant No. 101116212).
-
-    If you would like to reference this tutorial, please cite the following paper, as the content presented here is based on the findings of this research:
-
-    *   S. Wogrin, "Time Series Aggregation for Optimization: One-Size-Fits-All?," *IEEE Transactions on Smart Grid*, vol. 14, no. 3, pp. 2489-2492, May 2023, doi: 10.1109/TSG.2023.3242467. [Link](https://ieeexplore.ieee.org/abstract/document/10037240).
+    3. **Time Series Aggregation**: Applies clustering techniques for time series aggregation.
     """)
     return
 
@@ -53,6 +38,8 @@ def _(mo):
 def _(mo):
     mo.md(r"""
     # **1. Environment Configuration**
+
+    Import necessary libraries
     """)
     return
 
@@ -63,22 +50,21 @@ def _():
     import os
     from pathlib import Path
     import requests
-    import time
 
+    import marimo as mo
     import matplotlib.pyplot as plt
     import numpy as np
     import pandas as pd
-    import pyomo.environ as pyo
     from sklearn.cluster import KMeans
     from sklearn.preprocessing import MinMaxScaler
 
-    return KMeans, MinMaxScaler, Path, copy, np, os, pd, plt, requests
+    return KMeans, MinMaxScaler, Path, copy, mo, np, os, pd, plt, requests
 
 
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    # **2. Set Up the Simulation Parameters and Visualize the Input Time Series**
+    # **2. Load and Visualize the Input Time Series**
     """)
     return
 
@@ -86,47 +72,7 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 2.1. Set the values for the simulation parameters
-
-    * **Time Horizon**: The cardinality of the set of time steps $\mathcal{T}$ considered in the simulation, is denoted by $T$ (`T`).
-    * **Operational Costs**: The electricity generation costs (€/MWh) for wind and thermal power plants are denoted by $C^\mathrm{op,w}$ (`OPER_COST_WIND`) and $C^\mathrm{op,th}$ (`OPER_COST_THERMAL`), respectively. The costs associated with energy storage charging and discharging (€/MWh) are represented by $C^{\mathrm{c,s}}$ (`OPER_COST_STOR_CH`) and $C^{\mathrm{d,s}}$ (`OPER_COST_STOR_CH`) respectively.
-    * **Storage Parameters**: The charging and discharging efficiencies of the storage are denoted by $\eta^{\mathrm{c,s}}$ (`STOR_EFF_CH`) and $\eta^{\mathrm{d,s}}$ (`STOR_EFF_DIS`) respectively. The energy to power ratio (h) is denoted by $\tau$ (`STOR_ETP`).
-    * **Non-Supplied Energy Cost**: The penalty cost (€/MWh) for non-supplied energy is denoted by $C^\mathrm{nse}$ (`OPER_COST_STOR_CH`).
-    * **Investment Costs**: The capital cost (€/MW) for wind, thermal and storage capacity expansion are denoted by $C^\mathrm{inv,w}$ (`INV_COST_WIND`), $C^\mathrm{inv,th}$ (`INV_COST_THERMAL`) and $C^\mathrm{inv,s}$ (`INV_COST_STOR`), respectively.
-
-    **Do not modify the values assigned to these parameters.**
-    """)
-    return
-
-
-@app.cell
-def _():
-    # Number of time steps
-    T = 8736
-
-    # Define operational costs
-    OPER_COST_WIND = 3  # for wind power (€/MWh)
-    OPER_COST_THERMAL = 60  # for thermal power (€/MWh)
-    OPER_COST_NSE = 5000 # for non-supplied energy (€/MWh)
-    OPER_COST_STOR_DIS = 1.5 # storage discharging cost (€/MWh)
-    OPER_COST_STOR_CH = 0 # storage charging cost (€/MWh)
-
-    # Define storage parameters
-    STOR_EFF_CH = 0.9 # storage charging efficiency
-    STOR_EFF_DIS = 0.9 # storage discharging efficiency
-    STOR_ETP = 4 # storage energy to power ratio (h)
-
-    # Define investment costs
-    INV_COST_WIND = 4e4  # for wind power (€/MW)
-    INV_COST_THERMAL = 4e4  # for thermal power (€/MW)
-    INV_COST_STOR =1e4 # storage investment cost (€/MW)
-    return
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
-    ## 2.2. Load input data
+    ## 2.1. Load input data
 
     Fetch `input_data` from `JakubRybka/Tutorial_input_data` repo if not already fetched.
 
@@ -163,7 +109,7 @@ def _(Path, os, pd, requests):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 2.3. Graphical representation of the input data
+    ## 2.2. Graphical representation of the input data
 
     Display the input data in two ways:
 
@@ -200,7 +146,7 @@ def _(input_data, plt):
 
     # Display plots
     plt.tight_layout()
-    plt.show()
+    plt.gca()
     return
 
 
@@ -252,14 +198,14 @@ def _(input_data, np, pd, plt):
 
     # Display plots
     plt.tight_layout()
-    plt.show()
+    plt.gca()
     return
 
 
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    # **4. Time Series Aggregation**
+    # **3. Time Series Aggregation**
     """)
     return
 
@@ -405,7 +351,7 @@ def _(KMeans, MinMaxScaler, copy, np, pd):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 4.1. Run **K-Means representative hours clustering**
+    ## 3.1. Run **K-Means representative hours clustering**
     """)
     return
 
@@ -563,7 +509,7 @@ def _(
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 4.3. Run **Representative day clustering**
+    ## 3.2. Run **Representative day clustering**
     """)
     return
 

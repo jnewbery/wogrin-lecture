@@ -1,6 +1,11 @@
 # /// script
 # dependencies = ["pyomo"]
 # ///
+"""
+Title: Summer School Tutorial
+Description: Tutorial on time-series aggregation techniques, presented by Prof. Sonja Wogrin at the DTU PES Summer School 2026.
+"""
+
 
 import marimo
 
@@ -232,7 +237,7 @@ def _(input_data, plt):
 
     # Display plots
     plt.tight_layout()
-    plt.show()
+    plt.gca()
     return
 
 
@@ -284,7 +289,7 @@ def _(input_data, np, pd, plt):
 
     # Display plots
     plt.tight_layout()
-    plt.show()
+    plt.gca()
     return
 
 
@@ -713,7 +718,7 @@ def _(K, input_data, kmeans_centroids_shifted, kmeans_labels_shifted, np, plt):
     ]
     plt.legend(handles=legend_elements, loc='upper right', title="Cluster", title_fontsize=16, fontsize=16, markerscale=1, framealpha=1)
 
-    plt.show()
+    plt.gca()
     return (cluster_colors,)
 
 
@@ -806,7 +811,7 @@ def _(
 
     # Display plot
     plt.tight_layout()
-    plt.show()
+    plt.gca()
     return (P,)
 
 
@@ -935,7 +940,7 @@ def _(CH_mapping, P, input_data, np, plt):
 
     # Display plot
     plt.tight_layout()
-    plt.show()
+    plt.gca()
     return
 
 
@@ -1052,7 +1057,7 @@ def _(input_data, plt, rep_centroids_shifted, rep_labels_shifted):
 
     # Adjust rect to make space for the legend on the right
     plt.tight_layout(rect=[0, 0, 0.9, 1])  
-    plt.show()
+    plt.gca()
     return
 
 
